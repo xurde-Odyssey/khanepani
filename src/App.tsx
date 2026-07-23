@@ -25,14 +25,7 @@ export default function App() {
         <Route path="/entry/bulk" element={<BulkEntryGrid />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/reports/detail" element={<ReportDetail />} />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute allow={['admin', 'supervisor']}>
-              <Admin />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/admin" element={<Admin />} />
       </Route>
     </Routes>
   )
