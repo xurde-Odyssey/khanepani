@@ -1,9 +1,70 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Project, Pump, Profile } from '../types/database'
 
 type PumpWithProject = Pump & {
   projects?: Pick<Project, 'name'> | null
+}
+
+function Icon({
+  children,
+  className = '',
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`h-4 w-4 ${className}`}
+    >
+      {children}
+    </svg>
+  )
+}
+
+function EditIcon() {
+  return (
+    <Icon>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </Icon>
+  )
+}
+
+function PauseIcon() {
+  return (
+    <Icon>
+      <path d="M8 5v14" />
+      <path d="M16 5v14" />
+    </Icon>
+  )
+}
+
+function PlayIcon() {
+  return (
+    <Icon>
+      <path d="m8 5 11 7-11 7V5z" />
+    </Icon>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <Icon>
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </Icon>
+  )
 }
 
 export function Admin() {
@@ -154,36 +215,66 @@ export function Admin() {
             {pumpError}
           </p>
         )}
-        <table className="text-sm w-full mb-4">
-          <thead>
-            <tr className="text-left text-slate-500">
-              <th className="py-1">No.</th>
-              <th className="py-1">Project</th>
-              <th className="py-1">Status</th>
-              <th className="py-1"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {pumps.map((p) => (
-              <tr key={p.id} className="border-t border-slate-100">
-                <td className="py-2">{p.pump_no}</td>
-                <td className="py-2">{p.projects?.name ?? '—'}</td>
-                <td className="py-2">{p.is_active ? 'Active' : 'Inactive'}</td>
-                <td className="py-2">
-                  <button onClick={() => openEditPump(p)} className="text-slate-700 text-sm">
-                    Edit
-                  </button>
-                  <button onClick={() => togglePump(p)} className="ml-4 text-brand-600 text-sm">
-                    {p.is_active ? 'Deactivate' : 'Activate'}
-                  </button>
-                  <button onClick={() => setDeleteTarget(p)} className="ml-4 text-red-600 text-sm">
-                    Delete
-                  </button>
-                </td>
+        <div className="mb-4 overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-100">
+              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                <th className="px-4 py-3">Pump</th>
+                <th className="px-4 py-3">Project</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {pumps.map((p) => (
+                <tr key={p.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-medium text-slate-900">Pump #{p.pump_no}</td>
+                  <td className="px-4 py-3 text-slate-700">{p.projects?.name ?? '—'}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                        p.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {p.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEditPump(p)}
+                        title="Edit pump"
+                        aria-label={`Edit Pump #${p.pump_no}`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100"
+                      >
+                        <EditIcon />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => togglePump(p)}
+                        title={p.is_active ? 'Deactivate pump' : 'Activate pump'}
+                        aria-label={`${p.is_active ? 'Deactivate' : 'Activate'} Pump #${p.pump_no}`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-brand-600 hover:bg-brand-50"
+                      >
+                        {p.is_active ? <PauseIcon /> : <PlayIcon />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(p)}
+                        title="Delete pump"
+                        aria-label={`Delete Pump #${p.pump_no}`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <form onSubmit={addPump} className="flex flex-wrap gap-2 items-end">
           <div>
             <label className="block text-xs font-medium mb-1">Pump #</label>
