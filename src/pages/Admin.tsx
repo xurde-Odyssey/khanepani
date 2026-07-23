@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Project, Pump, Profile } from '../types/database'
+import type { Project, Pump } from '../types/database'
 
 type PumpWithProject = Pump & {
   projects?: Pick<Project, 'name'> | null
@@ -69,7 +69,6 @@ function TrashIcon() {
 
 export function Admin() {
   const [pumps, setPumps] = useState<PumpWithProject[]>([])
-  const [profiles, setProfiles] = useState<Profile[]>([])
   const [newPumpNo, setNewPumpNo] = useState('')
   const [newProjectName, setNewProjectName] = useState('')
   const [editingPump, setEditingPump] = useState<PumpWithProject | null>(null)
@@ -82,8 +81,6 @@ export function Admin() {
   async function loadAll() {
     const { data: pumpRows } = await supabase.from('pumps').select('*, projects(name)').order('pump_no')
     setPumps((pumpRows ?? []) as PumpWithProject[])
-    const { data: profileRows } = await supabase.from('profiles').select('*')
-    setProfiles((profileRows ?? []) as Profile[])
   }
 
   useEffect(() => {
@@ -199,11 +196,6 @@ export function Admin() {
     loadAll()
   }
 
-  async function changeRole(profileId: string, role: Profile['role']) {
-    await supabase.from('profiles').update({ role }).eq('id', profileId)
-    loadAll()
-  }
-
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-semibold text-slate-900">Admin</h1>
@@ -286,37 +278,6 @@ export function Admin() {
           </div>
           <button className="rounded-lg bg-brand-600 text-white px-4 py-2 text-sm">Add pump</button>
         </form>
-      </section>
-
-      <section className="bg-white rounded-xl shadow p-5">
-        <h2 className="font-medium text-slate-800 mb-3">Users</h2>
-        <table className="text-sm w-full">
-          <thead>
-            <tr className="text-left text-slate-500">
-              <th className="py-1">Name</th>
-              <th className="py-1">Role</th>
-            </tr>
-          </thead>
-          <tbody>
-            {profiles.map((p) => (
-              <tr key={p.id} className="border-t border-slate-100">
-                <td className="py-2">{p.full_name ?? '—'}</td>
-                <td className="py-2">
-                  <select
-                    value={p.role}
-                    onChange={(e) => changeRole(p.id, e.target.value as Profile['role'])}
-                    className="rounded-lg border border-slate-300 px-2 py-1"
-                  >
-                    <option value="admin">admin</option>
-                    <option value="supervisor">supervisor</option>
-                    <option value="operator">operator</option>
-                    <option value="viewer">viewer</option>
-                  </select>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </section>
 
       {editingPump && (
