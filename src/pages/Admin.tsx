@@ -6,6 +6,11 @@ type PumpWithProject = Pump & {
   projects?: Pick<Project, 'name'> | null
 }
 
+const projectNameSorter = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: 'base',
+})
+
 function Icon({
   children,
   className = '',
@@ -80,7 +85,12 @@ export function Admin() {
 
   async function loadAll() {
     const { data: pumpRows } = await supabase.from('pumps').select('*, projects(name)').order('pump_no')
-    setPumps((pumpRows ?? []) as PumpWithProject[])
+    const sortedPumps = ((pumpRows ?? []) as PumpWithProject[]).sort((a, b) => {
+      const projectCompare = projectNameSorter.compare(a.projects?.name ?? '', b.projects?.name ?? '')
+      if (projectCompare !== 0) return projectCompare
+      return a.pump_no - b.pump_no
+    })
+    setPumps(sortedPumps)
   }
 
   useEffect(() => {
