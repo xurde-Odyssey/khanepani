@@ -11,6 +11,11 @@ export function Admin() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [newPumpNo, setNewPumpNo] = useState('')
   const [newProjectName, setNewProjectName] = useState('')
+  const [editingPump, setEditingPump] = useState<PumpWithProject | null>(null)
+  const [editPumpNo, setEditPumpNo] = useState('')
+  const [editProjectName, setEditProjectName] = useState('')
+  const [editIsActive, setEditIsActive] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<PumpWithProject | null>(null)
   const [pumpError, setPumpError] = useState('')
 
   async function loadAll() {
@@ -24,14 +29,7 @@ export function Admin() {
     loadAll()
   }, [])
 
-  async function addPump(e: FormEvent) {
-    e.preventDefault()
-    const projectName = newProjectName.trim()
-    if (!newPumpNo || !projectName) return
-
-    setPumpError('')
-
-    let projectId: string | null = null
+  async function findOrCreateProject(projectName: string) {
     const { data: existingProject, error: projectLookupError } = await supabase
       .from('projects')
       .select('*')
@@ -39,25 +37,30 @@ export function Admin() {
       .limit(1)
       .maybeSingle()
 
-    if (projectLookupError) {
-      setPumpError(projectLookupError.message)
+    if (projectLookupError) return { projectId: null, error: projectLookupError.message }
+    if (existingProject) return { projectId: existingProject.id, error: null }
+
+    const { data: createdProject, error: projectCreateError } = await supabase
+      .from('projects')
+      .insert({ name: projectName })
+      .select()
+      .single()
+
+    if (projectCreateError) return { projectId: null, error: projectCreateError.message }
+    return { projectId: createdProject.id, error: null }
+  }
+
+  async function addPump(e: FormEvent) {
+    e.preventDefault()
+    const projectName = newProjectName.trim()
+    if (!newPumpNo || !projectName) return
+
+    setPumpError('')
+
+    const { projectId, error: projectError } = await findOrCreateProject(projectName)
+    if (projectError || !projectId) {
+      setPumpError(projectError ?? 'Could not create project.')
       return
-    }
-
-    if (existingProject) {
-      projectId = existingProject.id
-    } else {
-      const { data: createdProject, error: projectCreateError } = await supabase
-        .from('projects')
-        .insert({ name: projectName })
-        .select()
-        .single()
-
-      if (projectCreateError) {
-        setPumpError(projectCreateError.message)
-        return
-      }
-      projectId = createdProject.id
     }
 
     const { error } = await supabase.from('pumps').insert({
@@ -77,6 +80,46 @@ export function Admin() {
     loadAll()
   }
 
+  function openEditPump(pump: PumpWithProject) {
+    setPumpError('')
+    setEditingPump(pump)
+    setEditPumpNo(String(pump.pump_no))
+    setEditProjectName(pump.projects?.name ?? '')
+    setEditIsActive(pump.is_active)
+  }
+
+  async function savePumpEdit(e: FormEvent) {
+    e.preventDefault()
+    if (!editingPump) return
+
+    const projectName = editProjectName.trim()
+    if (!editPumpNo || !projectName) return
+
+    setPumpError('')
+    const { projectId, error: projectError } = await findOrCreateProject(projectName)
+    if (projectError || !projectId) {
+      setPumpError(projectError ?? 'Could not create project.')
+      return
+    }
+
+    const { error } = await supabase
+      .from('pumps')
+      .update({
+        project_id: projectId,
+        pump_no: Number(editPumpNo),
+        is_active: editIsActive,
+      })
+      .eq('id', editingPump.id)
+
+    if (error) {
+      setPumpError(error.message)
+      return
+    }
+
+    setEditingPump(null)
+    loadAll()
+  }
+
   async function togglePump(pump: Pump) {
     setPumpError('')
     const { error } = await supabase.from('pumps').update({ is_active: !pump.is_active }).eq('id', pump.id)
@@ -85,16 +128,13 @@ export function Admin() {
   }
 
   async function deletePump(pump: PumpWithProject) {
-    const label = `Pump #${pump.pump_no}${pump.projects?.name ? ` - ${pump.projects.name}` : ''}`
-    const confirmed = window.confirm(`Delete ${label}? This also deletes its related daily entries.`)
-    if (!confirmed) return
-
     setPumpError('')
     const { error } = await supabase.from('pumps').delete().eq('id', pump.id)
     if (error) {
       setPumpError(error.message)
       return
     }
+    setDeleteTarget(null)
     loadAll()
   }
 
@@ -130,10 +170,13 @@ export function Admin() {
                 <td className="py-2">{p.projects?.name ?? '—'}</td>
                 <td className="py-2">{p.is_active ? 'Active' : 'Inactive'}</td>
                 <td className="py-2">
-                  <button onClick={() => togglePump(p)} className="text-brand-600 text-sm">
+                  <button onClick={() => openEditPump(p)} className="text-slate-700 text-sm">
+                    Edit
+                  </button>
+                  <button onClick={() => togglePump(p)} className="ml-4 text-brand-600 text-sm">
                     {p.is_active ? 'Deactivate' : 'Activate'}
                   </button>
-                  <button onClick={() => deletePump(p)} className="ml-4 text-red-600 text-sm">
+                  <button onClick={() => setDeleteTarget(p)} className="ml-4 text-red-600 text-sm">
                     Delete
                   </button>
                 </td>
@@ -184,6 +227,82 @@ export function Admin() {
           </tbody>
         </table>
       </section>
+
+      {editingPump && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <form onSubmit={savePumpEdit} className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Edit pump</h2>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Pump #</label>
+                <input
+                  value={editPumpNo}
+                  onChange={(e) => setEditPumpNo(e.target.value)}
+                  type="number"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Project name</label>
+                <input
+                  value={editProjectName}
+                  onChange={(e) => setEditProjectName(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editIsActive}
+                  onChange={(e) => setEditIsActive(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Active
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingPump(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white">
+                Save changes
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Delete pump</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Delete Pump #{deleteTarget.pump_no}
+              {deleteTarget.projects?.name ? ` from ${deleteTarget.projects.name}` : ''}? This also deletes related daily entries.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deletePump(deleteTarget)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white"
+              >
+                Delete pump
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
