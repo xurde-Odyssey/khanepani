@@ -66,9 +66,45 @@ export interface Database {
   public: {
     Tables: {
       projects: { Row: Project; Insert: Partial<Project>; Update: Partial<Project>; Relationships: [] }
-      pumps: { Row: Pump; Insert: Partial<Pump>; Update: Partial<Pump>; Relationships: [] }
-      daily_entries: { Row: DailyEntry; Insert: Partial<DailyEntry>; Update: Partial<DailyEntry>; Relationships: [] }
-      profiles: { Row: Profile; Insert: Partial<Profile>; Update: Partial<Profile>; Relationships: [] }
+      pumps: {
+        Row: Pump
+        Insert: Partial<Pump>
+        Update: Partial<Pump>
+        Relationships: [
+          {
+            foreignKeyName: 'pumps_project_id_fkey'
+            columns: ['project_id']
+            referencedRelation: 'projects'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      daily_entries: {
+        Row: DailyEntry
+        Insert: Partial<DailyEntry>
+        Update: Partial<DailyEntry>
+        Relationships: [
+          {
+            foreignKeyName: 'daily_entries_pump_id_fkey'
+            columns: ['pump_id']
+            referencedRelation: 'pumps'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      profiles: {
+        Row: Profile
+        Insert: Partial<Profile>
+        Update: Partial<Profile>
+        Relationships: [
+          {
+            foreignKeyName: 'profiles_project_id_fkey'
+            columns: ['project_id']
+            referencedRelation: 'projects'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: {
       v_daily_entries_enriched: {

@@ -1,17 +1,21 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Pump, Profile } from '../types/database'
+import type { Project, Pump, Profile } from '../types/database'
+
+type PumpWithProject = Pump & {
+  projects?: Pick<Project, 'name'> | null
+}
 
 export function Admin() {
-  const [pumps, setPumps] = useState<Pump[]>([])
+  const [pumps, setPumps] = useState<PumpWithProject[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [newPumpNo, setNewPumpNo] = useState('')
-  const [newPumpLabel, setNewPumpLabel] = useState('')
+  const [newProjectName, setNewProjectName] = useState('')
   const [pumpError, setPumpError] = useState('')
 
   async function loadAll() {
-    const { data: pumpRows } = await supabase.from('pumps').select('*').order('pump_no')
-    setPumps((pumpRows ?? []) as Pump[])
+    const { data: pumpRows } = await supabase.from('pumps').select('*, projects(name)').order('pump_no')
+    setPumps((pumpRows ?? []) as PumpWithProject[])
     const { data: profileRows } = await supabase.from('profiles').select('*')
     setProfiles((profileRows ?? []) as Profile[])
   }
@@ -22,11 +26,54 @@ export function Admin() {
 
   async function addPump(e: FormEvent) {
     e.preventDefault()
-    if (!newPumpNo) return
+    const projectName = newProjectName.trim()
+    if (!newPumpNo || !projectName) return
+
     setPumpError('')
-    await supabase.from('pumps').insert({ pump_no: Number(newPumpNo), label: newPumpLabel || null, is_active: true })
+
+    let projectId: string | null = null
+    const { data: existingProject, error: projectLookupError } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('name', projectName)
+      .limit(1)
+      .maybeSingle()
+
+    if (projectLookupError) {
+      setPumpError(projectLookupError.message)
+      return
+    }
+
+    if (existingProject) {
+      projectId = existingProject.id
+    } else {
+      const { data: createdProject, error: projectCreateError } = await supabase
+        .from('projects')
+        .insert({ name: projectName })
+        .select()
+        .single()
+
+      if (projectCreateError) {
+        setPumpError(projectCreateError.message)
+        return
+      }
+      projectId = createdProject.id
+    }
+
+    const { error } = await supabase.from('pumps').insert({
+      project_id: projectId,
+      pump_no: Number(newPumpNo),
+      label: null,
+      is_active: true,
+    })
+
+    if (error) {
+      setPumpError(error.message)
+      return
+    }
+
     setNewPumpNo('')
-    setNewPumpLabel('')
+    setNewProjectName('')
     loadAll()
   }
 
@@ -37,8 +84,8 @@ export function Admin() {
     loadAll()
   }
 
-  async function deletePump(pump: Pump) {
-    const label = `Pump #${pump.pump_no}${pump.label ? ` - ${pump.label}` : ''}`
+  async function deletePump(pump: PumpWithProject) {
+    const label = `Pump #${pump.pump_no}${pump.projects?.name ? ` - ${pump.projects.name}` : ''}`
     const confirmed = window.confirm(`Delete ${label}? This also deletes its related daily entries.`)
     if (!confirmed) return
 
@@ -71,7 +118,7 @@ export function Admin() {
           <thead>
             <tr className="text-left text-slate-500">
               <th className="py-1">No.</th>
-              <th className="py-1">Label</th>
+              <th className="py-1">Project</th>
               <th className="py-1">Status</th>
               <th className="py-1"></th>
             </tr>
@@ -80,7 +127,7 @@ export function Admin() {
             {pumps.map((p) => (
               <tr key={p.id} className="border-t border-slate-100">
                 <td className="py-2">{p.pump_no}</td>
-                <td className="py-2">{p.label ?? '—'}</td>
+                <td className="py-2">{p.projects?.name ?? '—'}</td>
                 <td className="py-2">{p.is_active ? 'Active' : 'Inactive'}</td>
                 <td className="py-2">
                   <button onClick={() => togglePump(p)} className="text-brand-600 text-sm">
@@ -100,8 +147,8 @@ export function Admin() {
             <input value={newPumpNo} onChange={(e) => setNewPumpNo(e.target.value)} type="number" className="rounded-lg border border-slate-300 px-3 py-2 w-24" />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1">Label</label>
-            <input value={newPumpLabel} onChange={(e) => setNewPumpLabel(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2" />
+            <label className="block text-xs font-medium mb-1">Project name</label>
+            <input value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2" />
           </div>
           <button className="rounded-lg bg-brand-600 text-white px-4 py-2 text-sm">Add pump</button>
         </form>
