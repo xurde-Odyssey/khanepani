@@ -7,6 +7,7 @@ export function Admin() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [newPumpNo, setNewPumpNo] = useState('')
   const [newPumpLabel, setNewPumpLabel] = useState('')
+  const [pumpError, setPumpError] = useState('')
 
   async function loadAll() {
     const { data: pumpRows } = await supabase.from('pumps').select('*').order('pump_no')
@@ -22,6 +23,7 @@ export function Admin() {
   async function addPump(e: FormEvent) {
     e.preventDefault()
     if (!newPumpNo) return
+    setPumpError('')
     await supabase.from('pumps').insert({ pump_no: Number(newPumpNo), label: newPumpLabel || null, is_active: true })
     setNewPumpNo('')
     setNewPumpLabel('')
@@ -29,7 +31,23 @@ export function Admin() {
   }
 
   async function togglePump(pump: Pump) {
-    await supabase.from('pumps').update({ is_active: !pump.is_active }).eq('id', pump.id)
+    setPumpError('')
+    const { error } = await supabase.from('pumps').update({ is_active: !pump.is_active }).eq('id', pump.id)
+    if (error) setPumpError(error.message)
+    loadAll()
+  }
+
+  async function deletePump(pump: Pump) {
+    const label = `Pump #${pump.pump_no}${pump.label ? ` - ${pump.label}` : ''}`
+    const confirmed = window.confirm(`Delete ${label}? This also deletes its related daily entries.`)
+    if (!confirmed) return
+
+    setPumpError('')
+    const { error } = await supabase.from('pumps').delete().eq('id', pump.id)
+    if (error) {
+      setPumpError(error.message)
+      return
+    }
     loadAll()
   }
 
@@ -44,6 +62,11 @@ export function Admin() {
 
       <section className="bg-white rounded-xl shadow p-5">
         <h2 className="font-medium text-slate-800 mb-3">Pumps</h2>
+        {pumpError && (
+          <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {pumpError}
+          </p>
+        )}
         <table className="text-sm w-full mb-4">
           <thead>
             <tr className="text-left text-slate-500">
@@ -62,6 +85,9 @@ export function Admin() {
                 <td className="py-2">
                   <button onClick={() => togglePump(p)} className="text-brand-600 text-sm">
                     {p.is_active ? 'Deactivate' : 'Activate'}
+                  </button>
+                  <button onClick={() => deletePump(p)} className="ml-4 text-red-600 text-sm">
+                    Delete
                   </button>
                 </td>
               </tr>

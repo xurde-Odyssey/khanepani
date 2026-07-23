@@ -9,7 +9,7 @@
 -- per-pump override table below.
 create table aggregation_rules (
   variable text not null,
-  pump_id uuid references pumps(id), -- null = default rule for all pumps
+  pump_id uuid references pumps(id) on delete cascade, -- null = default rule for all pumps
   rule text not null check (rule in ('sum','avg')),
   primary key (variable, pump_id)
 );

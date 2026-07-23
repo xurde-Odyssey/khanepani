@@ -24,7 +24,7 @@ create table pumps (
 -- exactly (bulk entry grid, monthly report, Excel export).
 create table daily_entries (
   id uuid primary key default gen_random_uuid(),
-  pump_id uuid references pumps(id) not null,
+  pump_id uuid references pumps(id) on delete cascade not null,
   entry_date date not null,
   bs_year int not null,
   bs_month text not null check (bs_month in (

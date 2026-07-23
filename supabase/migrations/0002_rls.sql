@@ -46,3 +46,6 @@ create policy daily_entries_insert on daily_entries
 create policy daily_entries_update on daily_entries
   for update using (auth.role() = 'authenticated')
   with check (auth.role() = 'authenticated');
+
+create policy daily_entries_delete on daily_entries
+  for delete using (auth.role() = 'authenticated');
