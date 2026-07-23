@@ -5,6 +5,38 @@
 html, body, #root { height: 100%; }
 body { @apply bg-slate-50 text-slate-900; }
 
+.designer-credit {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  margin: 0;
+  color: rgb(100 116 139);
+  font-size: 0.92rem;
+}
+
+.designer-credit__separator {
+  color: rgb(148 163 184);
+  margin: 0 0.12rem;
+}
+
+.designer-credit a {
+  color: #ff6700;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.designer-credit a:hover {
+  color: #ff6700;
+}
+
+.designer-credit a.designer-credit__company,
+.designer-credit a.designer-credit__company:hover {
+  color: #3F7C7A;
+}
+
 @media print {
   html,
   body,

@@ -22,7 +22,7 @@ export function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <div className="relative min-h-screen flex items-center justify-center bg-slate-50 px-4 pb-20">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white rounded-xl shadow p-6 space-y-4">
         <h1 className="text-xl font-semibold text-brand-700">Water Supply Reporting</h1>
         {supabaseConfigError && (
@@ -61,6 +61,25 @@ export function Login() {
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+      <footer className="absolute inset-x-0 bottom-0 flex flex-col gap-2 px-4 py-5 text-center text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:text-left">
+        <p className="m-0">Copyright 2026. All rights reserved.</p>
+        <p className="designer-credit">
+          <span>Designed by</span>
+          <a href="https://www.bhandaridipesh.com.np/" target="_blank" rel="noopener noreferrer">
+            Xurde
+          </a>
+          <span className="designer-credit__separator" aria-hidden="true">•</span>
+          <span>Founder,</span>
+          <a
+            className="designer-credit__company"
+            href="https://www.concoretechnologies.com.np/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Concore Technologies
+          </a>
+        </p>
+      </footer>
     </div>
   )
 }

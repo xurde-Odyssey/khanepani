@@ -211,17 +211,17 @@ export function Admin() {
           <table className="w-full text-sm">
             <thead className="bg-slate-100">
               <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                <th className="px-4 py-3">Pump</th>
-                <th className="px-4 py-3">Project</th>
+                <th className="px-4 py-3">Project Name</th>
+                <th className="px-4 py-3">Pumps</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {pumps.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">Pump #{p.pump_no}</td>
                   <td className="px-4 py-3 text-slate-700">{p.projects?.name ?? '—'}</td>
+                  <td className="px-4 py-3 font-medium text-slate-900">Pump #{p.pump_no}</td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
@@ -269,14 +269,14 @@ export function Admin() {
         </div>
         <form onSubmit={addPump} className="flex flex-wrap gap-2 items-end">
           <div>
-            <label className="block text-xs font-medium mb-1">Pump #</label>
-            <input value={newPumpNo} onChange={(e) => setNewPumpNo(e.target.value)} type="number" className="rounded-lg border border-slate-300 px-3 py-2 w-24" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1">Project name</label>
+            <label className="block text-xs font-medium mb-1">Project Name</label>
             <input value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2" />
           </div>
-          <button className="rounded-lg bg-brand-600 text-white px-4 py-2 text-sm">Add pump</button>
+          <div>
+            <label className="block text-xs font-medium mb-1">Pumps</label>
+            <input value={newPumpNo} onChange={(e) => setNewPumpNo(e.target.value)} type="number" className="rounded-lg border border-slate-300 px-3 py-2 w-24" />
+          </div>
+          <button className="rounded-lg bg-brand-600 text-white px-4 py-2 text-sm">Add Pump</button>
         </form>
       </section>
 
