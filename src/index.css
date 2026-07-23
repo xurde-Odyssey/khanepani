@@ -4,3 +4,34 @@
 
 html, body, #root { height: 100%; }
 body { @apply bg-slate-50 text-slate-900; }
+
+@media print {
+  html,
+  body,
+  #root {
+    height: auto;
+  }
+
+  body {
+    background: white;
+  }
+
+  nav,
+  button {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+}

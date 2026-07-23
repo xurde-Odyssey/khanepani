@@ -129,6 +129,10 @@ export function ReportDetail() {
     doc.save(`report-${period}-${start}-to-${end}.pdf`)
   }
 
+  function printReport() {
+    window.print()
+  }
+
   const chartData = {
     labels: rows.map((r) => `#${r.pump.pump_no}`),
     datasets: [
@@ -146,14 +150,15 @@ export function ReportDetail() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 print:space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-slate-900">
           Report — {period.replace('_', ' ')} ({start} to {end})
         </h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 print:hidden">
           <button onClick={exportExcel} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Export Excel</button>
           <button onClick={exportPdf} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Export PDF</button>
+          <button onClick={printReport} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Print</button>
         </div>
       </div>
 
@@ -161,11 +166,11 @@ export function ReportDetail() {
         <p className="text-slate-500">Loading…</p>
       ) : (
         <>
-          <div className="bg-white rounded-xl shadow p-5">
+          <div className="bg-white rounded-xl shadow p-5 print:shadow-none print:p-0">
             <Bar data={chartData} options={{ responsive: true, plugins: { legend: { position: 'top' } } }} />
           </div>
 
-          <div className="bg-white rounded-xl shadow overflow-x-auto">
+          <div className="bg-white rounded-xl shadow overflow-x-auto print:shadow-none print:overflow-visible">
             <table className="text-sm w-full">
               <thead>
                 <tr className="bg-slate-100">
