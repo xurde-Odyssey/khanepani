@@ -13,6 +13,7 @@ import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { supabase } from '../lib/supabase'
+import { bsToGregorian, daysInBsMonth, todayBs } from '../lib/bsCalendar'
 import { DAILY_VARIABLES, type Pump } from '../types/database'
 import type { ReportPeriod } from './Reports'
 
@@ -38,8 +39,14 @@ function periodToRange(period: ReportPeriod, start?: string, end?: string): { st
     return { start: fmt(s), end: fmt(today) }
   }
   if (period === 'monthly') {
-    const s = new Date(today.getFullYear(), today.getMonth(), 1)
-    return { start: fmt(s), end: fmt(today) }
+    const bsToday = todayBs()
+    return {
+      start: bsToGregorian({ ...bsToday, bs_day: 1 }),
+      end: bsToGregorian({
+        ...bsToday,
+        bs_day: daysInBsMonth(bsToday.bs_year, bsToday.bs_month),
+      }),
+    }
   }
   if (period === 'quarterly') {
     const s = new Date(today)

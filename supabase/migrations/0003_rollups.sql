@@ -10,9 +10,16 @@
 create table aggregation_rules (
   variable text not null,
   pump_id uuid references pumps(id) on delete cascade, -- null = default rule for all pumps
-  rule text not null check (rule in ('sum','avg')),
-  primary key (variable, pump_id)
+  rule text not null check (rule in ('sum','avg'))
 );
+
+create unique index aggregation_rules_default_variable_key
+  on aggregation_rules (variable)
+  where pump_id is null;
+
+create unique index aggregation_rules_pump_variable_key
+  on aggregation_rules (variable, pump_id)
+  where pump_id is not null;
 
 insert into aggregation_rules (variable, pump_id, rule) values
   ('operating_hours', null, 'sum'),

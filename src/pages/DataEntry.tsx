@@ -87,6 +87,11 @@ function isFlowmeterValid(values: Partial<Record<DailyNumberKey, string>>) {
   return start === null || end === null || end >= start
 }
 
+function clampBsDay(day: number) {
+  if (!Number.isFinite(day)) return 1
+  return Math.min(33, Math.max(1, Math.trunc(day)))
+}
+
 export function DataEntry() {
   const { profile } = useAuth()
   const [pumps, setPumps] = useState<PumpWithProject[]>([])
@@ -103,7 +108,10 @@ export function DataEntry() {
   const [loadingEntries, setLoadingEntries] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
-  const entryDate = bsToGregorian({ bs_year: bsYear, bs_month: bsMonth, bs_day: bsDay })
+  const isBsDayValid = bsDay >= 1 && bsDay <= 33
+  const entryDate = isBsDayValid
+    ? bsToGregorian({ bs_year: bsYear, bs_month: bsMonth, bs_day: bsDay })
+    : bsToGregorian({ bs_year: bsYear, bs_month: bsMonth, bs_day: 1 })
   const pumpsById = useMemo(() => new Map(pumps.map((pump) => [pump.id, pump])), [pumps])
   const selectedPump = pumpsById.get(pumpId)
   const selectedProjectName = selectedPump?.projects?.name ?? 'No project assigned'
@@ -182,6 +190,12 @@ export function DataEntry() {
     if (!isFlowmeterValid(values)) {
       setStatus('error')
       setErrorMsg('Flowmeter end must be greater than or equal to flowmeter start.')
+      return
+    }
+
+    if (!isBsDayValid) {
+      setStatus('error')
+      setErrorMsg('BS day must be between 1 and 33.')
       return
     }
 
@@ -315,9 +329,9 @@ export function DataEntry() {
                   type="number"
                   inputMode="numeric"
                   min={1}
-                  max={32}
+                  max={33}
                   value={bsDay}
-                  onChange={(e) => setBsDay(Number(e.target.value))}
+                  onChange={(e) => setBsDay(clampBsDay(Number(e.target.value)))}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
                 />
               </div>
