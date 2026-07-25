@@ -14,7 +14,7 @@ type DailyNumberKey =
   | 'distribution'
   | 'lps'
 
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'deleting'
 
 type PumpWithProject = Pump & {
   projects?: Pick<Project, 'name'> | null
@@ -30,6 +30,8 @@ const FIELDS: { key: DailyNumberKey; label: string; shortLabel: string; step?: s
   { key: 'distribution', label: 'Distribution', shortLabel: 'Distribution', step: '0.1' },
   { key: 'lps', label: 'LPS', shortLabel: 'LPS', step: '0.01' },
 ]
+
+const REQUIRED_FIELDS: DailyNumberKey[] = ['operating_hours', 'production', 'distribution', 'backwash_time', 'lps']
 
 function PencilIcon() {
   return (
@@ -68,6 +70,27 @@ function SaveIcon() {
   )
 }
 
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </svg>
+  )
+}
+
 function valuesFromEntry(entry: DailyEntry): Record<DailyNumberKey, string> {
   return Object.fromEntries(FIELDS.map((f) => [f.key, entry[f.key] == null ? '' : String(entry[f.key])])) as Record<
     DailyNumberKey,
@@ -85,6 +108,13 @@ function isFlowmeterValid(values: Partial<Record<DailyNumberKey, string>>) {
   const start = values.flowmeter_start_unit ? Number(values.flowmeter_start_unit) : null
   const end = values.flowmeter_end_unit ? Number(values.flowmeter_end_unit) : null
   return start === null || end === null || end >= start
+}
+
+function requiredFieldMessage(values: Partial<Record<DailyNumberKey, string>>) {
+  const labels = REQUIRED_FIELDS.filter((key) => !values[key]?.trim()).map(
+    (key) => FIELDS.find((field) => field.key === key)?.label ?? key.replace(/_/g, ' ')
+  )
+  return labels.length > 0 ? `Required fields missing: ${labels.join(', ')}.` : ''
 }
 
 const MAX_BS_DAY = 32
@@ -107,6 +137,8 @@ export function DataEntry() {
   const [editingRows, setEditingRows] = useState<Record<string, boolean>>({})
   const [status, setStatus] = useState<SaveStatus>('idle')
   const [rowStatus, setRowStatus] = useState<Record<string, SaveStatus>>({})
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
+  const [deleteTarget, setDeleteTarget] = useState<DailyEntry | null>(null)
   const [loadingEntries, setLoadingEntries] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -144,6 +176,7 @@ export function DataEntry() {
       setEntries(rows)
       setDrafts(Object.fromEntries(rows.map((entry) => [entry.id, valuesFromEntry(entry)])))
       setRowStatus({})
+      setRowErrors({})
       setEditingRows({})
     }
 
@@ -167,6 +200,7 @@ export function DataEntry() {
       },
     }))
     setRowStatus((current) => ({ ...current, [entryId]: 'idle' }))
+    setRowErrors((current) => ({ ...current, [entryId]: '' }))
   }
 
   function editRow(entry: DailyEntry) {
@@ -176,18 +210,27 @@ export function DataEntry() {
     }))
     setEditingRows((current) => ({ ...current, [entry.id]: true }))
     setRowStatus((current) => ({ ...current, [entry.id]: 'idle' }))
+    setRowErrors((current) => ({ ...current, [entry.id]: '' }))
   }
 
   function cancelEdit(entry: DailyEntry) {
     setDrafts((current) => ({ ...current, [entry.id]: valuesFromEntry(entry) }))
     setEditingRows((current) => ({ ...current, [entry.id]: false }))
     setRowStatus((current) => ({ ...current, [entry.id]: 'idle' }))
+    setRowErrors((current) => ({ ...current, [entry.id]: '' }))
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setStatus('saving')
     setErrorMsg('')
+
+    const missingMessage = requiredFieldMessage(values)
+    if (missingMessage) {
+      setStatus('error')
+      setErrorMsg(missingMessage)
+      return
+    }
 
     if (!isFlowmeterValid(values)) {
       setStatus('error')
@@ -226,9 +269,21 @@ export function DataEntry() {
   async function saveRow(entry: DailyEntry) {
     const draft = drafts[entry.id] ?? valuesFromEntry(entry)
     setRowStatus((current) => ({ ...current, [entry.id]: 'saving' }))
+    setRowErrors((current) => ({ ...current, [entry.id]: '' }))
+
+    const missingMessage = requiredFieldMessage(draft)
+    if (missingMessage) {
+      setRowStatus((current) => ({ ...current, [entry.id]: 'error' }))
+      setRowErrors((current) => ({ ...current, [entry.id]: missingMessage }))
+      return
+    }
 
     if (!isFlowmeterValid(draft)) {
       setRowStatus((current) => ({ ...current, [entry.id]: 'error' }))
+      setRowErrors((current) => ({
+        ...current,
+        [entry.id]: 'Flowmeter end must be greater than or equal to flowmeter start.',
+      }))
       return
     }
 
@@ -242,11 +297,54 @@ export function DataEntry() {
 
     if (error) {
       setRowStatus((current) => ({ ...current, [entry.id]: 'error' }))
+      setRowErrors((current) => ({ ...current, [entry.id]: error.message }))
     } else {
       await loadEntries()
       setEditingRows((current) => ({ ...current, [entry.id]: false }))
       setRowStatus((current) => ({ ...current, [entry.id]: 'saved' }))
     }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    const deletedId = deleteTarget.id
+
+    setRowStatus((current) => ({ ...current, [deletedId]: 'deleting' }))
+    setRowErrors((current) => ({ ...current, [deletedId]: '' }))
+
+    const { error } = await supabase
+      .from('daily_entries')
+      .delete()
+      .eq('id', deletedId)
+      .eq('pump_id', deleteTarget.pump_id)
+      .eq('entry_date', deleteTarget.entry_date)
+
+    if (error) {
+      setRowStatus((current) => ({ ...current, [deletedId]: 'error' }))
+      setRowErrors((current) => ({ ...current, [deletedId]: error.message }))
+      setDeleteTarget(null)
+      return
+    }
+
+    const { data: remainingRows, error: verifyError } = await supabase
+      .from('daily_entries')
+      .select('id')
+      .eq('id', deletedId)
+      .limit(1)
+
+    if (verifyError || (remainingRows && remainingRows.length > 0)) {
+      setRowStatus((current) => ({ ...current, [deletedId]: 'error' }))
+      setRowErrors((current) => ({
+        ...current,
+        [deletedId]: verifyError?.message ?? 'Delete was not applied. Run the daily_entries delete policy SQL in Supabase.',
+      }))
+      setDeleteTarget(null)
+      return
+    }
+
+    setEntries((current) => current.filter((entry) => entry.id !== deletedId))
+    setDeleteTarget(null)
+    await loadEntries()
   }
 
   const sortedEntries = [...entries].sort((a, b) => {
@@ -350,11 +448,15 @@ export function DataEntry() {
             <div className="grid gap-3 sm:grid-cols-2">
               {FIELDS.map((f) => (
                 <div key={f.key}>
-                  <label className="mb-1 block text-sm font-medium">{f.label}</label>
+                  <label className="mb-1 block text-sm font-medium">
+                    {f.label}
+                    {REQUIRED_FIELDS.includes(f.key) && <span className="text-red-600"> *</span>}
+                  </label>
                   <input
                     type="number"
                     inputMode="decimal"
                     step={f.step}
+                    required={REQUIRED_FIELDS.includes(f.key)}
                     value={values[f.key] ?? ''}
                     onChange={(e) => update(f.key, e.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
@@ -422,6 +524,7 @@ export function DataEntry() {
                     const pump = pumpsById.get(entry.pump_id)
                     const draft = drafts[entry.id] ?? valuesFromEntry(entry)
                     const currentStatus = rowStatus[entry.id] ?? 'idle'
+                    const rowError = rowErrors[entry.id] ?? ''
                     const isEditing = editingRows[entry.id] ?? false
 
                     return (
@@ -439,6 +542,7 @@ export function DataEntry() {
                                 type="number"
                                 inputMode="decimal"
                                 step={f.step}
+                                required={REQUIRED_FIELDS.includes(f.key)}
                                 value={draft[f.key]}
                                 onChange={(e) => updateDraft(entry.id, f.key, e.target.value)}
                                 className="h-10 w-24 rounded-md border border-slate-300 px-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
@@ -453,8 +557,9 @@ export function DataEntry() {
                         ))}
                         <td className="whitespace-nowrap px-4 py-3 text-sm">
                           {currentStatus === 'saving' && <span className="text-slate-500">Saving...</span>}
+                          {currentStatus === 'deleting' && <span className="text-slate-500">Deleting...</span>}
                           {currentStatus === 'saved' && <span className="text-green-700">Saved</span>}
-                          {currentStatus === 'error' && <span className="text-red-600">Check flowmeter values</span>}
+                          {currentStatus === 'error' && <span className="text-red-600">{rowError || 'Check required values'}</span>}
                           {currentStatus === 'idle' && (
                             <span className={isEditing ? 'text-brand-700' : 'text-slate-400'}>
                               {isEditing ? 'Editing' : 'Ready'}
@@ -468,7 +573,7 @@ export function DataEntry() {
                                 <button
                                   type="button"
                                   onClick={() => cancelEdit(entry)}
-                                  disabled={currentStatus === 'saving'}
+                                  disabled={currentStatus === 'saving' || currentStatus === 'deleting'}
                                   className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   Cancel
@@ -476,7 +581,7 @@ export function DataEntry() {
                                 <button
                                   type="button"
                                   onClick={() => saveRow(entry)}
-                                  disabled={currentStatus === 'saving'}
+                                  disabled={currentStatus === 'saving' || currentStatus === 'deleting'}
                                   className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   <SaveIcon />
@@ -487,12 +592,22 @@ export function DataEntry() {
                               <button
                                 type="button"
                                 onClick={() => editRow(entry)}
-                                className="inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-100"
+                                disabled={currentStatus === 'deleting'}
+                                className="inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <PencilIcon />
                                 <span>Edit</span>
                               </button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(entry)}
+                              disabled={currentStatus === 'saving' || currentStatus === 'deleting'}
+                              className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <TrashIcon />
+                              <span>{currentStatus === 'deleting' ? 'Deleting...' : 'Delete'}</span>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -504,6 +619,41 @@ export function DataEntry() {
           )}
         </section>
       </div>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Delete entry?</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              This will permanently delete the entry for{' '}
+              <span className="font-medium text-slate-900">
+                Pump #{pumpsById.get(deleteTarget.pump_id)?.pump_no ?? '-'}
+                {pumpsById.get(deleteTarget.pump_id)?.label ? ` - ${pumpsById.get(deleteTarget.pump_id)?.label}` : ''}
+              </span>{' '}
+              on {bsMonth} {bsDay}, {bsYear}.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={(rowStatus[deleteTarget.id] ?? 'idle') === 'deleting'}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={(rowStatus[deleteTarget.id] ?? 'idle') === 'deleting'}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <TrashIcon />
+                <span>{(rowStatus[deleteTarget.id] ?? 'idle') === 'deleting' ? 'Deleting...' : 'Delete entry'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
