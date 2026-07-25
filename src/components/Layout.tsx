@@ -33,6 +33,7 @@ function SignOutIcon() {
 export function Layout() {
   const { profile, signOut } = useAuth()
   const displayName = profile?.full_name || 'Signed in'
+  const roleLabel = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : 'Account'
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -55,22 +56,24 @@ export function Layout() {
             </NavLink>
           ))}
         </div>
-        <div className="border-l border-white/10 md:mt-auto md:border-l-0 md:border-t">
-          <button
-            onClick={() => signOut()}
-            className="flex h-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-brand-600/60 md:w-full"
-          >
-            <span className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-semibold md:inline-flex">
+        <div className="border-l border-white/10 p-2 md:mt-auto md:border-l-0 md:border-t md:p-3">
+          <div className="hidden items-center gap-3 rounded-lg bg-white/10 px-3 py-3 md:flex">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-sm font-semibold">
               {displayName.slice(0, 1).toUpperCase()}
             </span>
-            <span className="hidden min-w-0 flex-1 md:block">
-              <span className="block truncate text-xs text-white/70">Account</span>
+            <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{displayName}</span>
+              <span className="block truncate text-xs text-white/70">{roleLabel}</span>
             </span>
-            <span className="inline-flex items-center gap-2 md:gap-0" title="Sign out">
+          </div>
+          <button
+            onClick={() => signOut()}
+            className="mt-0 flex h-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white/90 hover:bg-white/10 md:mt-2 md:w-full md:justify-start"
+            title="Sign out"
+          >
               <SignOutIcon />
-              <span className="md:hidden">Sign out</span>
-            </span>
+              <span className="hidden md:inline">Sign out</span>
+              <span className="md:hidden">Logout</span>
           </button>
         </div>
       </nav>

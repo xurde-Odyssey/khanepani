@@ -6,7 +6,7 @@ import {
   REPORT_PARAMETER_OPTIONS,
   type ReportParameterKey,
 } from '../lib/reportParameters'
-import { BS_MONTHS, bsToGregorian, daysInBsMonth, todayBs } from '../lib/bsCalendar'
+import { BS_MONTHS, bsToGregorian, daysInBsMonth, formatBsDate, todayBs } from '../lib/bsCalendar'
 import type { BsMonth, Pump } from '../types/database'
 
 export type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'half_year' | 'annual' | 'custom'
@@ -277,7 +277,8 @@ export function Reports() {
                     onDayChange={setComparisonEndBsDay}
                   />
                   <p className="sm:col-span-2 text-xs text-slate-500">
-                    Converted range: {comparisonStartDate || '—'} to {comparisonEndDate || '—'}
+                    Selected range: {comparisonStartDate ? formatBsDate(comparisonStartDate) : '—'} to{' '}
+                    {comparisonEndDate ? formatBsDate(comparisonEndDate) : '—'}
                   </p>
                 </div>
               ) : (

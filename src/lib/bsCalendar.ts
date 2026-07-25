@@ -69,3 +69,13 @@ export function daysInBsMonth(bs_year: number, bs_month: BsMonth): number {
 export function todayBs(): BsDate {
   return gregorianToBs(new Date().toISOString().slice(0, 10))
 }
+
+export function formatBsDate(dateStr: string): string {
+  const bs = gregorianToBs(dateStr)
+  return `${bs.bs_year} ${bs.bs_month} ${bs.bs_day}`
+}
+
+export function formatBsShortDate(dateStr: string): string {
+  const bs = gregorianToBs(dateStr)
+  return `${bs.bs_month.slice(0, 3)} ${bs.bs_day}`
+}

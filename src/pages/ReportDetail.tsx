@@ -16,7 +16,7 @@ import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { supabase } from '../lib/supabase'
-import { bsToGregorian, daysInBsMonth, todayBs } from '../lib/bsCalendar'
+import { bsToGregorian, daysInBsMonth, formatBsDate, formatBsShortDate, todayBs } from '../lib/bsCalendar'
 import {
   REPORT_PARAMETER_OPTIONS,
   parseReportParameterKeys,
@@ -52,6 +52,11 @@ interface ComparisonMetrics {
 
 interface ComparisonRow extends ComparisonMetrics {
   label: string
+}
+
+interface DatePumpComparisonRow extends ComparisonMetrics {
+  date: string
+  pumpLabel: string
 }
 
 type NumericComparisonKey = Exclude<ReportParameterKey, 'notes'>
@@ -312,6 +317,37 @@ export function ReportDetail() {
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [dateEntries])
 
+  const datePumpComparisonRows = useMemo<DatePumpComparisonRow[]>(() => {
+    const pumpsById = new Map(rows.map((row) => [row.pump.id, row.pump]))
+    const baseRows = dateEntries.map((entry) => {
+      const pump = pumpsById.get(entry.pump_id)
+      const totals: Record<string, number> = {
+        operating_hours: entry.operating_hours ?? 0,
+        production: entry.production ?? 0,
+        backwash_time: entry.backwash_time ?? 0,
+        backwash_unit: entry.backwash_unit ?? 0,
+        distribution: entry.distribution ?? 0,
+        flowmeter_total: (entry.flowmeter_end_unit ?? 0) - (entry.flowmeter_start_unit ?? 0),
+        lps: entry.lps ?? 0,
+      }
+      return {
+        date: entry.entry_date,
+        pumpLabel: pump ? `Pump #${pump.pump_no}${pump.label ? ` - ${pump.label}` : ''}` : 'Unknown pump',
+        ...metricsFromTotals(totals, 24),
+      }
+    })
+
+    const productiveRates = baseRows
+      .map((r) => r.productionPerHour)
+      .filter((value): value is number => value !== null && value > 0)
+    const fleetAvgProductionPerHour =
+      productiveRates.length > 0 ? productiveRates.reduce((sum, value) => sum + value, 0) / productiveRates.length : 0
+
+    return baseRows
+      .map((row) => ({ ...row, notes: notesForMetrics(row, fleetAvgProductionPerHour) }))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.pumpLabel.localeCompare(b.pumpLabel))
+  }, [dateEntries, rows])
+
   const comparisonRows = compareBy === 'dates' ? dateComparisonRows : pumpComparisonRows
   const selectedPumpLabel =
     pumpId === 'all'
@@ -353,7 +389,9 @@ export function ReportDetail() {
     }
 
     const comparisonData = comparisonRows.map((r) => {
-      const rec: Record<string, unknown> = { [compareBy === 'dates' ? 'Date' : 'Pump']: r.label }
+      const rec: Record<string, unknown> = {
+        [compareBy === 'dates' ? 'Date' : 'Pump']: compareBy === 'dates' ? formatBsDate(r.label) : r.label,
+      }
       for (const column of selectedColumns) {
         const value = r[column.key]
         rec[column.label] = typeof value === 'number' ? formatNumber(value, column.suffix) : ''
@@ -363,7 +401,20 @@ export function ReportDetail() {
     })
     const ws = XLSX.utils.json_to_sheet(comparisonData)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Pump Comparison')
+    XLSX.utils.book_append_sheet(wb, ws, compareBy === 'dates' ? 'Date Totals' : 'Pump Comparison')
+    if (compareBy === 'dates') {
+      const breakdownData = datePumpComparisonRows.map((r) => {
+        const rec: Record<string, unknown> = { Date: formatBsDate(r.date), Pump: r.pumpLabel }
+        for (const column of selectedColumns) {
+          const value = r[column.key]
+          rec[column.label] = typeof value === 'number' ? formatNumber(value, column.suffix) : ''
+        }
+        if (showNotes) rec.Notes = r.notes.length > 0 ? r.notes.join('; ') : 'OK'
+        return rec
+      })
+      const breakdownWs = XLSX.utils.json_to_sheet(breakdownData)
+      XLSX.utils.book_append_sheet(wb, breakdownWs, 'Pump Breakdown')
+    }
     XLSX.writeFile(wb, `report-${period}-${start}-to-${end}.xlsx`)
   }
 
@@ -371,7 +422,7 @@ export function ReportDetail() {
     const doc = new jsPDF()
     doc.setFontSize(14)
     doc.text(
-      `${mode === 'comparison' ? `${compareBy === 'dates' ? 'Date' : 'Pump'} Comparison` : 'Production Report'} (${period}) — ${start} to ${end}`,
+      `${mode === 'comparison' ? `${compareBy === 'dates' ? 'Date' : 'Pump'} Comparison` : 'Production Report'} (${period}) - ${formatBsDate(start)} to ${formatBsDate(end)}`,
       14,
       16
     )
@@ -403,7 +454,7 @@ export function ReportDetail() {
       startY: 38,
       head: [[compareBy === 'dates' ? 'Date' : 'Pump', ...selectedColumns.map((column) => column.label), ...(showNotes ? ['Notes'] : [])]],
       body: comparisonRows.map((r) => [
-        r.label,
+        compareBy === 'dates' ? formatBsDate(r.label) : r.label,
         ...selectedColumns.map((column) => {
           const value = r[column.key]
           return typeof value === 'number' ? formatNumber(value, column.suffix) : '—'
@@ -413,6 +464,23 @@ export function ReportDetail() {
       styles: { fontSize: 7 },
       headStyles: { fillColor: [30, 127, 184] },
     })
+    if (compareBy === 'dates') {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 8,
+        head: [['Date', 'Pump', ...selectedColumns.map((column) => column.label), ...(showNotes ? ['Notes'] : [])]],
+        body: datePumpComparisonRows.map((r) => [
+          formatBsDate(r.date),
+          r.pumpLabel,
+          ...selectedColumns.map((column) => {
+            const value = r[column.key]
+            return typeof value === 'number' ? formatNumber(value, column.suffix) : '—'
+          }),
+          ...(showNotes ? [r.notes.length > 0 ? r.notes.join('; ') : 'OK'] : []),
+        ]),
+        styles: { fontSize: 7 },
+        headStyles: { fillColor: [71, 85, 105] },
+      })
+    }
     doc.save(`report-${period}-${start}-to-${end}.pdf`)
   }
 
@@ -421,7 +489,10 @@ export function ReportDetail() {
   }
 
   const chartData = {
-    labels: mode === 'comparison' ? comparisonRows.map((r) => r.label) : rows.map((r) => `#${r.pump.pump_no}`),
+    labels:
+      mode === 'comparison'
+        ? comparisonRows.map((r) => (compareBy === 'dates' ? formatBsShortDate(r.label) : r.label))
+        : rows.map((r) => `#${r.pump.pump_no}`),
     datasets:
       mode === 'comparison' && (chartType === 'pie' || chartType === 'doughnut')
         ? [
@@ -482,7 +553,7 @@ export function ReportDetail() {
             {mode === 'comparison' ? `${compareBy === 'dates' ? 'Date' : 'Pump'} comparison` : 'Report'} — {period.replace('_', ' ')}
           </h1>
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
-            <span className="rounded-full bg-slate-100 px-3 py-1">Range: {start} to {end}</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1">Range: {formatBsDate(start)} to {formatBsDate(end)}</span>
             {mode === 'comparison' ? (
               <>
                 <span className="rounded-full bg-slate-100 px-3 py-1">Compare by: {compareBy === 'dates' ? 'Dates' : 'Pumps'}</span>
@@ -555,7 +626,7 @@ export function ReportDetail() {
               <div className="bg-white rounded-xl shadow overflow-x-auto print:shadow-none print:overflow-visible">
                 <div className="px-4 py-3 border-b border-slate-200">
                   <h2 className="font-medium text-slate-900">
-                    {compareBy === 'dates' ? 'Date-wise parameter comparison' : 'Pump performance comparison'}
+                    {compareBy === 'dates' ? 'Date-wise total comparison' : 'Pump performance comparison'}
                   </h2>
                   <p className="text-xs text-slate-500 mt-1">
                     {compareBy === 'dates'
@@ -576,7 +647,9 @@ export function ReportDetail() {
                   <tbody>
                     {comparisonRows.map((r) => (
                       <tr key={r.label} className="odd:bg-white even:bg-slate-50">
-                        <td className="px-3 py-2 whitespace-nowrap">{r.label}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {compareBy === 'dates' ? formatBsDate(r.label) : r.label}
+                        </td>
                         {selectedColumns.map((column) => {
                           const value = r[column.key]
                           return (
@@ -605,6 +678,60 @@ export function ReportDetail() {
                   </tbody>
                 </table>
               </div>
+
+              {compareBy === 'dates' && (
+                <div className="bg-white rounded-xl shadow overflow-x-auto print:shadow-none print:overflow-visible">
+                  <div className="px-4 py-3 border-b border-slate-200">
+                    <h2 className="font-medium text-slate-900">Pump breakdown by date</h2>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Individual selected pump values are shown for each date, alongside the total date comparison above.
+                    </p>
+                  </div>
+                  <table className="text-sm w-full">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className="px-3 py-2 text-left">Date</th>
+                        <th className="px-3 py-2 text-left">Pump</th>
+                        {selectedColumns.map((column) => (
+                          <th key={column.key} className="px-3 py-2 text-right">{column.label}</th>
+                        ))}
+                        {showNotes && <th className="px-3 py-2 text-left">Notes</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {datePumpComparisonRows.map((r) => (
+                        <tr key={`${r.date}-${r.pumpLabel}`} className="odd:bg-white even:bg-slate-50">
+                          <td className="px-3 py-2 whitespace-nowrap">{formatBsDate(r.date)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{r.pumpLabel}</td>
+                          {selectedColumns.map((column) => {
+                            const value = r[column.key]
+                            return (
+                              <td key={column.key} className="px-3 py-2 text-right">
+                                {typeof value === 'number' ? formatNumber(value, column.suffix) : '—'}
+                              </td>
+                            )
+                          })}
+                          {showNotes && (
+                            <td className="px-3 py-2 min-w-48">
+                              {r.notes.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {r.notes.map((note) => (
+                                    <span key={note} className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                      {note}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-slate-500">OK</span>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </>
           ) : (
             <div className="bg-white rounded-xl shadow overflow-x-auto print:shadow-none print:overflow-visible">

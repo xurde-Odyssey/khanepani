@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bar, Line } from 'react-chartjs-2'
+import { Bar, Line, Radar } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
+  RadialLinearScale,
   BarElement,
   LineElement,
   PointElement,
+  Filler,
   Tooltip,
   Legend,
 } from 'chart.js'
 import { supabase } from '../lib/supabase'
+import { formatBsDate, formatBsShortDate } from '../lib/bsCalendar'
 import type { DailyEntry, Pump } from '../types/database'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, RadialLinearScale, BarElement, LineElement, PointElement, Filler, Tooltip, Legend)
 
 interface PumpAlert {
   pump: Pump
@@ -45,6 +48,15 @@ interface DailySnapshot {
   operatingHours: number
 }
 
+type DashboardPeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+
+const DASHBOARD_PERIODS: { key: DashboardPeriod; label: string }[] = [
+  { key: 'weekly', label: 'Weekly' },
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'quarterly', label: 'Quarterly' },
+  { key: 'yearly', label: 'Yearly' },
+]
+
 function fmt(value: number | null | undefined, digits = 1) {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
   return value.toFixed(digits)
@@ -58,7 +70,27 @@ function dateString(date: Date) {
   return date.toISOString().slice(0, 10)
 }
 
+function dashboardRange(period: DashboardPeriod) {
+  const today = new Date()
+  const start = new Date(today)
+  if (period === 'weekly') {
+    start.setDate(today.getDate() - 6)
+  } else if (period === 'monthly') {
+    start.setDate(1)
+  } else if (period === 'quarterly') {
+    start.setMonth(today.getMonth() - 3)
+  } else {
+    start.setFullYear(today.getFullYear() - 1)
+  }
+  return { start: dateString(start), end: dateString(today) }
+}
+
+function labelForPeriod(period: DashboardPeriod) {
+  return DASHBOARD_PERIODS.find((item) => item.key === period)?.label ?? 'Monthly'
+}
+
 export function Dashboard() {
+  const [period, setPeriod] = useState<DashboardPeriod>('monthly')
   const [pumps, setPumps] = useState<Pump[]>([])
   const [monthTotals, setMonthTotals] = useState<MonthTotals | null>(null)
   const [pumpSnapshots, setPumpSnapshots] = useState<PumpSnapshot[]>([])
@@ -73,10 +105,7 @@ export function Dashboard() {
       const activePumps = (pumpRows ?? []) as Pump[]
       setPumps(activePumps)
 
-      const monthStart = new Date()
-      monthStart.setDate(1)
-      const startStr = monthStart.toISOString().slice(0, 10)
-      const todayStr = new Date().toISOString().slice(0, 10)
+      const { start: startStr, end: todayStr } = dashboardRange(period)
 
       const { data: entries } = await supabase
         .from('daily_entries')
@@ -119,16 +148,14 @@ export function Dashboard() {
       })
       setPumpSnapshots(snapshots)
 
-      const sevenDaysAgo = new Date()
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
-      const recentDateSet = new Set<string>()
-      for (let index = 0; index < 7; index += 1) {
-        const day = new Date(sevenDaysAgo)
-        day.setDate(sevenDaysAgo.getDate() + index)
-        recentDateSet.add(dateString(day))
+      const startDate = new Date(`${startStr}T00:00:00`)
+      const endDate = new Date(`${todayStr}T00:00:00`)
+      const trendDates: string[] = []
+      for (const day = new Date(startDate); day <= endDate; day.setDate(day.getDate() + 1)) {
+        trendDates.push(dateString(day))
       }
       setDailySnapshots(
-        [...recentDateSet].map((date) => {
+        trendDates.map((date) => {
           const dayEntries = monthEntries.filter((entry) => entry.entry_date === date)
           return {
             date,
@@ -159,7 +186,7 @@ export function Dashboard() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [period])
 
   if (loading) return <div className="text-slate-500">Loading dashboard…</div>
 
@@ -167,9 +194,12 @@ export function Dashboard() {
   const lowPump = [...pumpSnapshots].filter((pump) => pump.operatingHours > 0).sort((a, b) => a.productionPerHour - b.productionPerHour)[0]
   const distributionPercent = safeDivide((monthTotals?.distribution ?? 0) * 100, monthTotals?.production ?? 0)
   const flowmeterVariance = (monthTotals?.production ?? 0) - (monthTotals?.flowmeter_total ?? 0)
+  const selectedRange = dashboardRange(period)
+  const periodLabel = labelForPeriod(period)
+  const radarSnapshots = dailySnapshots.slice(-7)
   const chartOptions = { responsive: true, plugins: { legend: { position: 'top' as const } } }
   const productionTrendData = {
-    labels: dailySnapshots.map((day) => day.date.slice(5)),
+    labels: dailySnapshots.map((day) => formatBsShortDate(day.date)),
     datasets: [
       {
         label: 'Production',
@@ -187,11 +217,30 @@ export function Dashboard() {
       },
     ],
   }
+  const sevenDayRadarData = {
+    labels: radarSnapshots.map((day) => formatBsShortDate(day.date)),
+    datasets: [
+      {
+        label: 'Production',
+        data: radarSnapshots.map((day) => day.production),
+        borderColor: '#1E7FB8',
+        backgroundColor: 'rgba(30, 127, 184, 0.18)',
+        pointBackgroundColor: '#1E7FB8',
+      },
+      {
+        label: 'Run hours',
+        data: radarSnapshots.map((day) => day.operatingHours),
+        borderColor: '#4F8A10',
+        backgroundColor: 'rgba(79, 138, 16, 0.16)',
+        pointBackgroundColor: '#4F8A10',
+      },
+    ],
+  }
   const pumpProductionData = {
     labels: pumpSnapshots.map((row) => `#${row.pump.pump_no}`),
     datasets: [
       {
-        label: 'Production this month',
+        label: `Production - ${periodLabel}`,
         data: pumpSnapshots.map((row) => row.production),
         backgroundColor: '#1E7FB8',
       },
@@ -203,16 +252,46 @@ export function Dashboard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-slate-500">Operational report summary for quick review.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Operational report summary for {formatBsDate(selectedRange.start)} to {formatBsDate(selectedRange.end)}.
+          </p>
         </div>
-        <Link to="/reports" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white">
-          Open reports
-        </Link>
+        <div className="flex flex-wrap gap-2 print:hidden">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+          >
+            Print
+          </button>
+          <Link to="/reports" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white">
+            Open reports
+          </Link>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow p-3 print:hidden">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {DASHBOARD_PERIODS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setPeriod(item.key)}
+              className={`rounded-lg border px-3 py-2 text-sm ${
+                period === item.key
+                  ? 'bg-brand-600 text-white border-brand-600'
+                  : 'border-slate-300 text-slate-700'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label="Production this month" value={fmt(monthTotals?.production)} />
-        <StatCard label="Run hours this month" value={fmt(monthTotals?.operating_hours)} />
+        <StatCard label={`Production - ${periodLabel}`} value={fmt(monthTotals?.production)} />
+        <StatCard label={`Run hours - ${periodLabel}`} value={fmt(monthTotals?.operating_hours)} />
         <StatCard label="Distribution rate" value={`${fmt(distributionPercent)}%`} />
         <StatCard label="Flowmeter variance" value={fmt(flowmeterVariance)} />
       </div>
@@ -235,15 +314,24 @@ export function Dashboard() {
         />
       </div>
 
+      <div className="bg-white rounded-xl shadow p-5">
+        <h2 className="font-medium text-slate-800 mb-3">Pump production - {periodLabel}</h2>
+        <div className="min-h-80">
+          <Bar data={pumpProductionData} options={chartOptions} />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl shadow p-5">
-          <h2 className="font-medium text-slate-800 mb-3">Last 7 days trend</h2>
+          <h2 className="font-medium text-slate-800 mb-3">{periodLabel} trend</h2>
           <Line data={productionTrendData} options={chartOptions} />
         </div>
 
         <div className="bg-white rounded-xl shadow p-5">
-          <h2 className="font-medium text-slate-800 mb-3">Pump production this month</h2>
-          <Bar data={pumpProductionData} options={chartOptions} />
+          <h2 className="font-medium text-slate-800 mb-3">Latest 7 days radar</h2>
+          <div className="mx-auto max-w-md">
+            <Radar data={sevenDayRadarData} options={chartOptions} />
+          </div>
         </div>
       </div>
 

@@ -87,9 +87,11 @@ function isFlowmeterValid(values: Partial<Record<DailyNumberKey, string>>) {
   return start === null || end === null || end >= start
 }
 
+const MAX_BS_DAY = 32
+
 function clampBsDay(day: number) {
   if (!Number.isFinite(day)) return 1
-  return Math.min(33, Math.max(1, Math.trunc(day)))
+  return Math.min(MAX_BS_DAY, Math.max(1, Math.trunc(day)))
 }
 
 export function DataEntry() {
@@ -108,7 +110,7 @@ export function DataEntry() {
   const [loadingEntries, setLoadingEntries] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
-  const isBsDayValid = bsDay >= 1 && bsDay <= 33
+  const isBsDayValid = bsDay >= 1 && bsDay <= MAX_BS_DAY
   const entryDate = isBsDayValid
     ? bsToGregorian({ bs_year: bsYear, bs_month: bsMonth, bs_day: bsDay })
     : bsToGregorian({ bs_year: bsYear, bs_month: bsMonth, bs_day: 1 })
@@ -195,7 +197,7 @@ export function DataEntry() {
 
     if (!isBsDayValid) {
       setStatus('error')
-      setErrorMsg('BS day must be between 1 and 33.')
+      setErrorMsg(`BS day must be between 1 and ${MAX_BS_DAY}.`)
       return
     }
 
@@ -305,7 +307,11 @@ export function DataEntry() {
                   type="number"
                   inputMode="numeric"
                   value={bsYear}
-                  onChange={(e) => setBsYear(Number(e.target.value))}
+                  onChange={(e) => {
+                    const nextYear = Number(e.target.value)
+                    setBsYear(nextYear)
+                    setBsDay((currentDay) => clampBsDay(currentDay))
+                  }}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
                 />
               </div>
@@ -313,7 +319,11 @@ export function DataEntry() {
                 <label className="mb-1 block text-sm font-medium">BS Month</label>
                 <select
                   value={bsMonth}
-                  onChange={(e) => setBsMonth(e.target.value as BsMonth)}
+                  onChange={(e) => {
+                    const nextMonth = e.target.value as BsMonth
+                    setBsMonth(nextMonth)
+                    setBsDay((currentDay) => clampBsDay(currentDay))
+                  }}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
                 >
                   {BS_MONTHS.map((m) => (
@@ -329,7 +339,7 @@ export function DataEntry() {
                   type="number"
                   inputMode="numeric"
                   min={1}
-                  max={33}
+                  max={MAX_BS_DAY}
                   value={bsDay}
                   onChange={(e) => setBsDay(clampBsDay(Number(e.target.value)))}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
