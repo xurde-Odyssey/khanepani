@@ -11,7 +11,7 @@ import type { BsMonth, Pump } from '../types/database'
 
 export type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'half_year' | 'annual' | 'custom'
 type ComparisonAxis = 'pumps' | 'dates'
-type ComparisonChartType = 'bar' | 'line' | 'pie' | 'doughnut'
+type ComparisonChartType = 'bar' | 'line' | 'pie' | 'doughnut' | 'combo'
 type DateCalendar = 'ad' | 'bs'
 
 export function Reports() {
@@ -327,6 +327,7 @@ export function Reports() {
                 ['line', 'Line'],
                 ['pie', 'Pie'],
                 ['doughnut', 'Doughnut'],
+                ['combo', 'Combo'],
               ] as [ComparisonChartType, string][]).map(([value, label]) => (
                 <button
                   key={value}

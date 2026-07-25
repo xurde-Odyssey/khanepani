@@ -8,6 +8,7 @@ import { BulkEntryGrid } from './pages/BulkEntryGrid'
 import { Reports } from './pages/Reports'
 import { ReportDetail } from './pages/ReportDetail'
 import { Admin } from './pages/Admin'
+import { Notes } from './pages/Notes'
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/reports/detail" element={<ReportDetail />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/notes" element={<Notes />} />
       </Route>
     </Routes>
   )

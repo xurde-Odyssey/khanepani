@@ -8,6 +8,7 @@ const NAV = [
   { to: '/entry/bulk', label: 'Bulk Grid' },
   { to: '/reports', label: 'Reports' },
   { to: '/admin', label: 'Admin' },
+  { to: '/notes', label: 'Notes' },
 ]
 
 function SignOutIcon() {

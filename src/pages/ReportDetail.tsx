@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Bar, Doughnut, Line, Pie } from 'react-chartjs-2'
+import { Bar, Chart, Doughnut, Line, Pie } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -55,7 +55,7 @@ interface ComparisonRow extends ComparisonMetrics {
 }
 
 type NumericComparisonKey = Exclude<ReportParameterKey, 'notes'>
-type ComparisonChartType = 'bar' | 'line' | 'pie' | 'doughnut'
+type ComparisonChartType = 'bar' | 'line' | 'pie' | 'doughnut' | 'combo'
 
 const numericParameterKeys = new Set<ReportParameterKey>(
   REPORT_PARAMETER_OPTIONS.filter((option) => option.key !== 'notes').map((option) => option.key)
@@ -63,7 +63,7 @@ const numericParameterKeys = new Set<ReportParameterKey>(
 const chartColors = ['#1E7FB8', '#4F8A10', '#C27A16', '#7C3AED', '#DC2626', '#0F766E', '#475569', '#DB2777']
 
 function parseChartType(chart: string | null): ComparisonChartType {
-  return chart === 'line' || chart === 'pie' || chart === 'doughnut' ? chart : 'bar'
+  return chart === 'line' || chart === 'pie' || chart === 'doughnut' || chart === 'combo' ? chart : 'bar'
 }
 
 function safeDivide(numerator: number, denominator: number): number | null {
@@ -436,6 +436,18 @@ export function ReportDetail() {
               backgroundColor: comparisonRows.map((_, index) => chartColors[index % chartColors.length]),
             },
           ]
+        : mode === 'comparison' && chartType === 'combo'
+        ? selectedColumns.slice(0, 4).map((column, index) => ({
+            type: index % 2 === 0 ? 'bar' as const : 'line' as const,
+            label: column.label,
+            data: comparisonRows.map((r) => {
+              const value = r[column.key]
+              return typeof value === 'number' && Number.isFinite(value) ? value : 0
+            }),
+            borderColor: chartColors[index % chartColors.length],
+            backgroundColor: chartColors[index % chartColors.length],
+            tension: 0.25,
+          }))
         : mode === 'comparison'
         ? selectedColumns.slice(0, 4).map((column, index) => ({
             label: column.label,
@@ -507,6 +519,8 @@ export function ReportDetail() {
               <div className="mx-auto max-w-xl">
                 <Doughnut data={chartData} options={chartOptions} />
               </div>
+            ) : chartType === 'combo' && mode === 'comparison' ? (
+              <Chart type="bar" data={chartData} options={chartOptions} />
             ) : (
               <Bar data={chartData} options={chartOptions} />
             )}
