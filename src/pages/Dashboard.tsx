@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Bar, Line, Radar } from 'react-chartjs-2'
 import {
@@ -67,7 +68,14 @@ function safeDivide(numerator: number, denominator: number) {
 }
 
 function dateString(date: Date) {
-  return date.toISOString().slice(0, 10)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function productionTotal(entries: DailyEntry[]) {
+  return entries.reduce((sum, entry) => sum + (entry.production ?? 0), 0)
 }
 
 function dashboardRange(period: DashboardPeriod) {
@@ -93,6 +101,8 @@ export function Dashboard() {
   const [period, setPeriod] = useState<DashboardPeriod>('monthly')
   const [pumps, setPumps] = useState<Pump[]>([])
   const [monthTotals, setMonthTotals] = useState<MonthTotals | null>(null)
+  const [todayProduction, setTodayProduction] = useState(0)
+  const [yesterdayProduction, setYesterdayProduction] = useState(0)
   const [pumpSnapshots, setPumpSnapshots] = useState<PumpSnapshot[]>([])
   const [dailySnapshots, setDailySnapshots] = useState<DailySnapshot[]>([])
   const [alerts, setAlerts] = useState<PumpAlert[]>([])
@@ -106,6 +116,9 @@ export function Dashboard() {
       setPumps(activePumps)
 
       const { start: startStr, end: todayStr } = dashboardRange(period)
+      const yesterday = new Date(`${todayStr}T00:00:00`)
+      yesterday.setDate(yesterday.getDate() - 1)
+      const yesterdayStr = dateString(yesterday)
 
       const { data: entries } = await supabase
         .from('daily_entries')
@@ -114,6 +127,16 @@ export function Dashboard() {
         .lte('entry_date', todayStr)
 
       const monthEntries = (entries ?? []) as DailyEntry[]
+      setTodayProduction(productionTotal(monthEntries.filter((entry) => entry.entry_date === todayStr)))
+      if (yesterdayStr >= startStr) {
+        setYesterdayProduction(productionTotal(monthEntries.filter((entry) => entry.entry_date === yesterdayStr)))
+      } else {
+        const { data: yesterdayEntries } = await supabase
+          .from('daily_entries')
+          .select('*')
+          .eq('entry_date', yesterdayStr)
+        setYesterdayProduction(productionTotal((yesterdayEntries ?? []) as DailyEntry[]))
+      }
       const totals = monthEntries.reduce<MonthTotals>(
         (acc, row: any) => ({
           operating_hours: acc.operating_hours + (row.operating_hours ?? 0),
@@ -290,7 +313,16 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label={`Production - ${periodLabel}`} value={fmt(monthTotals?.production)} />
+        <StatCard
+          label={`Production - ${periodLabel}`}
+          value={fmt(monthTotals?.production)}
+          detail={
+            <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+              <StatCardDetail label="Production - daily" value={fmt(todayProduction)} />
+              <StatCardDetail label="Production yesterday" value={fmt(yesterdayProduction)} />
+            </div>
+          }
+        />
         <StatCard label={`Run hours - ${periodLabel}`} value={fmt(monthTotals?.operating_hours)} />
         <StatCard label="Distribution rate" value={`${fmt(distributionPercent)}%`} />
         <StatCard label="Flowmeter variance" value={fmt(flowmeterVariance)} />
@@ -384,11 +416,21 @@ export function Dashboard() {
   )
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({ label, value, detail }: { label: string; value: string; detail?: ReactNode }) {
   return (
     <div className="bg-white rounded-xl shadow p-5">
       <div className="text-sm text-slate-500">{label}</div>
       <div className="text-2xl font-semibold text-brand-700 mt-1">{value}</div>
+      {detail}
+    </div>
+  )
+}
+
+function StatCardDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="mt-0.5 text-base font-semibold text-slate-900">{value}</div>
     </div>
   )
 }
