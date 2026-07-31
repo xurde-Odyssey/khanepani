@@ -4,6 +4,8 @@ import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { supabase } from '../lib/supabase'
+import { BsDateInput } from '../components/BsDateInput'
+import { formatBsDate } from '../lib/bsCalendar'
 import type { MaintenanceRecord } from '../types/database'
 
 type MaintenanceForm = {
@@ -11,7 +13,6 @@ type MaintenanceForm = {
   title: string
   done_by: string
   description: string
-  work_time: string
   equipments_used: string
   remarks: string
 }
@@ -21,7 +22,6 @@ const emptyMaintenanceForm: MaintenanceForm = {
   title: '',
   done_by: '',
   description: '',
-  work_time: '',
   equipments_used: '',
   remarks: '',
 }
@@ -103,14 +103,9 @@ function toForm(record: MaintenanceRecord): MaintenanceForm {
     title: record.title ?? '',
     done_by: record.done_by,
     description: record.description,
-    work_time: record.work_time ?? '',
     equipments_used: record.equipments_used ?? '',
     remarks: record.remarks ?? '',
   }
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(value))
 }
 
 export function Maintenance() {
@@ -156,11 +151,10 @@ export function Maintenance() {
 
   function exportExcel() {
     const rows = reportRecords.map((record) => ({
-      Date: record.maintenance_date,
+      Date: formatBsDate(record.maintenance_date),
       Title: record.title ?? '',
-      'Done by': record.done_by,
+      'No of work': record.done_by,
       Description: record.description,
-      Time: record.work_time ?? '',
       'Equipments used': record.equipments_used ?? '',
       Remarks: record.remarks ?? '',
     }))
@@ -176,13 +170,12 @@ export function Maintenance() {
     doc.text(`Records: ${reportRecords.length}`, 14, 22)
     autoTable(doc, {
       startY: 28,
-      head: [['Date', 'Title', 'Done by', 'Description', 'Time', 'Equipments used', 'Remarks']],
+      head: [['Date', 'Title', 'No of work', 'Description', 'Equipments used', 'Remarks']],
       body: reportRecords.map((record) => [
-        record.maintenance_date,
+        formatBsDate(record.maintenance_date),
         record.title ?? '',
         record.done_by,
         record.description,
-        record.work_time ?? '',
         record.equipments_used ?? '',
         record.remarks ?? '',
       ]),
@@ -192,15 +185,22 @@ export function Maintenance() {
 
   async function saveRecord(e: FormEvent) {
     e.preventDefault()
-    if (!form.maintenance_date || !form.done_by.trim() || !form.description.trim()) return
+    const title = form.title.trim()
+    const doneBy = form.done_by.trim()
+    const description = form.description.trim()
+
+    if (!form.maintenance_date || !title || !doneBy || !description) {
+      setError('Title, No of work, and Description of work are required.')
+      return
+    }
 
     setError('')
     const payload = {
       maintenance_date: form.maintenance_date,
-      title: form.title.trim() || null,
-      done_by: form.done_by.trim(),
-      description: form.description.trim(),
-      work_time: form.work_time.trim() || null,
+      title,
+      done_by: doneBy,
+      description,
+      work_time: null,
       equipments_used: form.equipments_used.trim() || null,
       remarks: form.remarks.trim() || null,
     }
@@ -252,24 +252,23 @@ export function Maintenance() {
           </span>
           <div>
             <h2 className="font-semibold text-slate-900">{editing ? 'Edit maintenance record' : 'Add maintenance record'}</h2>
-            <p className="text-xs text-slate-500">Date, person responsible, work description, time, equipment, and remarks.</p>
+            <p className="text-xs text-slate-500">Date, number of work, description, equipment, and remarks.</p>
           </div>
         </div>
 
         <form onSubmit={saveRecord} className="mt-5 grid grid-cols-1 lg:grid-cols-6 gap-4">
           <div className="lg:col-span-2">
-            <label className="block text-sm font-medium mb-1">Date</label>
-            <input
-              type="date"
+            <BsDateInput
+              label="Nepali date"
               value={form.maintenance_date}
-              onChange={(e) => setForm({ ...form, maintenance_date: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+              onChange={(maintenance_date) => setForm({ ...form, maintenance_date })}
             />
           </div>
           <div className="lg:col-span-2">
             <label className="block text-sm font-medium mb-1">Title</label>
             <input
               list="maintenance-title-suggestions"
+              required
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
@@ -281,25 +280,18 @@ export function Maintenance() {
             </datalist>
           </div>
           <div className="lg:col-span-2">
-            <label className="block text-sm font-medium mb-1">Done by</label>
+            <label className="block text-sm font-medium mb-1">No of work</label>
             <input
+              required
               value={form.done_by}
               onChange={(e) => setForm({ ...form, done_by: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-            />
-          </div>
-          <div className="lg:col-span-6">
-            <label className="block text-sm font-medium mb-1">Time</label>
-            <input
-              value={form.work_time}
-              onChange={(e) => setForm({ ...form, work_time: e.target.value })}
-              placeholder="Example: 10:00 AM - 12:30 PM"
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
             />
           </div>
           <div className="lg:col-span-3">
             <label className="block text-sm font-medium mb-1">Description of work</label>
             <textarea
+              required
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={4}
@@ -353,34 +345,22 @@ export function Maintenance() {
             </p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto_auto_auto] gap-2 print:hidden">
-          <div>
-            <label className="block text-xs font-medium mb-1">Start date</label>
-            <input
-              type="date"
-              value={reportStart}
-              onChange={(e) => setReportStart(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
+        <div className="mt-4 space-y-3 print:hidden">
+          <div className="max-w-xl space-y-3">
+            <BsDateInput label="Start Nepali date" value={reportStart} onChange={setReportStart} allowClear />
+            <BsDateInput label="End Nepali date" value={reportEnd} onChange={setReportEnd} allowClear />
           </div>
-          <div>
-            <label className="block text-xs font-medium mb-1">End date</label>
-            <input
-              type="date"
-              value={reportEnd}
-              onChange={(e) => setReportEnd(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={exportExcel} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              Export Excel
+            </button>
+            <button type="button" onClick={exportPdf} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              Export PDF
+            </button>
+            <button type="button" onClick={() => window.print()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              Print
+            </button>
           </div>
-          <button type="button" onClick={exportExcel} className="self-end rounded-lg border border-slate-300 px-3 py-2 text-sm">
-            Export Excel
-          </button>
-          <button type="button" onClick={exportPdf} className="self-end rounded-lg border border-slate-300 px-3 py-2 text-sm">
-            Export PDF
-          </button>
-          <button type="button" onClick={() => window.print()} className="self-end rounded-lg border border-slate-300 px-3 py-2 text-sm">
-            Print
-          </button>
         </div>
         <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full text-sm">
@@ -388,9 +368,8 @@ export function Maintenance() {
               <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Title</th>
-                <th className="px-4 py-3">Done by</th>
+                <th className="px-4 py-3">No of work</th>
                 <th className="px-4 py-3">Description</th>
-                <th className="px-4 py-3">Time</th>
                 <th className="px-4 py-3">Equipments used</th>
                 <th className="px-4 py-3">Remarks</th>
                 <th className="px-4 py-3 text-right">Action</th>
@@ -399,11 +378,10 @@ export function Maintenance() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {reportRecords.map((record) => (
                 <tr key={record.id} className="align-top hover:bg-slate-50">
-                  <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-900">{formatDate(record.maintenance_date)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-900">{formatBsDate(record.maintenance_date)}</td>
                   <td className="px-4 py-3 min-w-48 font-medium text-slate-800">{record.title || '-'}</td>
                   <td className="px-4 py-3 text-slate-700">{record.done_by}</td>
                   <td className="px-4 py-3 min-w-64 text-slate-700">{record.description}</td>
-                  <td className="px-4 py-3 text-slate-600">{record.work_time || '-'}</td>
                   <td className="px-4 py-3 min-w-48 text-slate-600">{record.equipments_used || '-'}</td>
                   <td className="px-4 py-3 min-w-48 text-slate-600">{record.remarks || '-'}</td>
                   <td className="px-4 py-3">
@@ -430,7 +408,7 @@ export function Maintenance() {
               ))}
               {reportRecords.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
                     No maintenance records found.
                   </td>
                 </tr>
@@ -445,7 +423,7 @@ export function Maintenance() {
           <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
             <h2 className="text-lg font-semibold text-slate-900">Delete maintenance record</h2>
             <p className="mt-2 text-sm text-slate-600">
-              Delete the maintenance record from {formatDate(deleteTarget.maintenance_date)}?
+              Delete the maintenance record from {formatBsDate(deleteTarget.maintenance_date)}?
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button

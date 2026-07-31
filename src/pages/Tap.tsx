@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { supabase } from '../lib/supabase'
+import { BsDateInput } from '../components/BsDateInput'
+import { formatBsDate } from '../lib/bsCalendar'
 import type { TapRecord } from '../types/database'
 
 type TapForm = {
@@ -10,7 +12,6 @@ type TapForm = {
   ward_no: string
   category: string
   tap_count: string
-  application_request: string
   water_tap_installment: string
   water_tap_full_fee: string
   remarks: string
@@ -21,13 +22,12 @@ const emptyTapForm: TapForm = {
   ward_no: '',
   category: '',
   tap_count: '',
-  application_request: '',
   water_tap_installment: '',
   water_tap_full_fee: '',
   remarks: '',
 }
 
-const categorySuggestions = ['Household', 'Public', 'School', 'Institutional', 'Commercial']
+const counterSuggestions = ['Counter 1', 'Counter 2', 'Counter 3']
 
 function Icon({ children }: { children: ReactNode }) {
   return (
@@ -73,15 +73,10 @@ function toForm(record: TapRecord): TapForm {
     ward_no: String(record.ward_no),
     category: record.category,
     tap_count: String(record.tap_count),
-    application_request: record.application_request ?? '',
     water_tap_installment: record.water_tap_installment == null ? '' : String(record.water_tap_installment),
     water_tap_full_fee: record.water_tap_full_fee == null ? '' : String(record.water_tap_full_fee),
     remarks: record.remarks ?? '',
   }
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(value))
 }
 
 function formatMoney(value: number | null) {
@@ -146,11 +141,10 @@ export function Tap() {
   }, [records, reportStart, reportEnd])
 
   const reportRows = report.filteredRecords.map((record) => ({
-    Date: record.record_date,
+    Date: formatBsDate(record.record_date),
     Ward: record.ward_no,
-    Category: record.category,
+    Counter: record.category,
     'No. of Tap': record.tap_count,
-    'Application / Request': record.application_request ?? '',
     'Water Tap Installment': record.water_tap_installment ?? '',
     'Water Tap Full Fee': record.water_tap_full_fee ?? '',
     Remarks: record.remarks ?? '',
@@ -174,13 +168,12 @@ export function Tap() {
     doc.text(`Total taps: ${report.totalTaps}`, 14, 22)
     autoTable(doc, {
       startY: 28,
-      head: [['Date', 'Ward', 'Category', 'No. of Tap', 'Application / Request', 'Installment', 'Full Fee', 'Remarks']],
+      head: [['Date', 'Ward', 'Counter', 'No. of Tap', 'Installment', 'Full Fee', 'Remarks']],
       body: report.filteredRecords.map((record) => [
-        record.record_date,
+        formatBsDate(record.record_date),
         `Ward ${record.ward_no}`,
         record.category,
         record.tap_count,
-        record.application_request ?? '',
         formatMoney(record.water_tap_installment),
         formatMoney(record.water_tap_full_fee),
         record.remarks ?? '',
@@ -191,13 +184,18 @@ export function Tap() {
 
   async function saveRecord(e: FormEvent) {
     e.preventDefault()
+    const wardText = form.ward_no.trim()
+    const tapCountText = form.tap_count.trim()
+    const category = form.category.trim()
     const wardNo = Number(form.ward_no)
     const tapCount = Number(form.tap_count)
     const installment = form.water_tap_installment ? Number(form.water_tap_installment) : null
     const fullFee = form.water_tap_full_fee ? Number(form.water_tap_full_fee) : null
-    const category = form.category.trim()
 
-    if (!form.record_date || !wardNo || !category || Number.isNaN(tapCount)) return
+    if (!form.record_date || !wardText || !category || !tapCountText || !wardNo || Number.isNaN(tapCount)) {
+      setError('Ward, Counter, and No. of Tap are required.')
+      return
+    }
 
     setError('')
     const payload = {
@@ -205,7 +203,6 @@ export function Tap() {
       ward_no: wardNo,
       category,
       tap_count: tapCount,
-      application_request: form.application_request.trim() || null,
       water_tap_installment: installment,
       water_tap_full_fee: fullFee,
       remarks: form.remarks.trim() || null,
@@ -255,21 +252,18 @@ export function Tap() {
         <section className="bg-white rounded-xl shadow border border-slate-100 p-5">
           <h2 className="font-semibold text-slate-900">{editing ? 'Edit tap record' : 'Add tap record'}</h2>
           <form onSubmit={saveRecord} className="mt-4 space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Date</label>
-              <input
-                type="date"
-                value={form.record_date}
-                onChange={(e) => setForm({ ...form, record_date: e.target.value })}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-              />
-            </div>
+            <BsDateInput
+              label="Nepali date"
+              value={form.record_date}
+              onChange={(record_date) => setForm({ ...form, record_date })}
+            />
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Ward</label>
                 <input
                   type="number"
                   min="1"
+                  required
                   value={form.ward_no}
                   onChange={(e) => setForm({ ...form, ward_no: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
@@ -280,6 +274,7 @@ export function Tap() {
                 <input
                   type="number"
                   min="0"
+                  required
                   value={form.tap_count}
                   onChange={(e) => setForm({ ...form, tap_count: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
@@ -287,26 +282,19 @@ export function Tap() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Category</label>
+              <label className="block text-sm font-medium mb-1">Counter</label>
               <input
-                list="tap-categories"
+                list="tap-counters"
+                required
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
               />
-              <datalist id="tap-categories">
-                {categorySuggestions.map((category) => (
-                  <option key={category} value={category} />
+              <datalist id="tap-counters">
+                {counterSuggestions.map((counter) => (
+                  <option key={counter} value={counter} />
                 ))}
               </datalist>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Application / Request</label>
-              <input
-                value={form.application_request}
-                onChange={(e) => setForm({ ...form, application_request: e.target.value })}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -365,7 +353,7 @@ export function Tap() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-semibold text-slate-900">Tap report</h2>
-              <p className="mt-1 text-xs text-slate-500">Total taps by ward and category.</p>
+              <p className="mt-1 text-xs text-slate-500">Total taps by ward and counter.</p>
             </div>
             <div className="grid grid-cols-3 gap-2">
             <div className="rounded-lg bg-brand-50 px-4 py-3 text-right">
@@ -383,34 +371,22 @@ export function Tap() {
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto_auto_auto] gap-2 print:hidden">
-            <div>
-              <label className="block text-xs font-medium mb-1">Start date</label>
-              <input
-                type="date"
-                value={reportStart}
-                onChange={(e) => setReportStart(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
+          <div className="mt-5 space-y-3 print:hidden">
+            <div className="max-w-xl space-y-3">
+              <BsDateInput label="Start Nepali date" value={reportStart} onChange={setReportStart} allowClear />
+              <BsDateInput label="End Nepali date" value={reportEnd} onChange={setReportEnd} allowClear />
             </div>
-            <div>
-              <label className="block text-xs font-medium mb-1">End date</label>
-              <input
-                type="date"
-                value={reportEnd}
-                onChange={(e) => setReportEnd(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={exportExcel} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                Export Excel
+              </button>
+              <button type="button" onClick={exportPdf} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                Export PDF
+              </button>
+              <button type="button" onClick={() => window.print()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                Print
+              </button>
             </div>
-            <button type="button" onClick={exportExcel} className="self-end rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              Export Excel
-            </button>
-            <button type="button" onClick={exportPdf} className="self-end rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              Export PDF
-            </button>
-            <button type="button" onClick={() => window.print()} className="self-end rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              Print
-            </button>
           </div>
 
           <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -427,7 +403,7 @@ export function Tap() {
               </div>
             </div>
             <div className="rounded-lg border border-slate-200 p-3">
-              <h3 className="text-sm font-semibold text-slate-800">Category totals</h3>
+              <h3 className="text-sm font-semibold text-slate-800">Counter totals</h3>
               <div className="mt-3 space-y-2">
                 {report.categories.map(([category, total]) => (
                   <div key={category} className="flex items-center justify-between gap-3 text-sm">
@@ -435,7 +411,7 @@ export function Tap() {
                     <span className="font-semibold text-slate-900">{total}</span>
                   </div>
                 ))}
-                {report.categories.length === 0 && <p className="text-sm text-slate-500">No category totals yet.</p>}
+                {report.categories.length === 0 && <p className="text-sm text-slate-500">No counter totals yet.</p>}
               </div>
             </div>
           </div>
@@ -450,9 +426,8 @@ export function Tap() {
               <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                 <th className="px-4 py-3">Ward</th>
                 <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Category</th>
+                <th className="px-4 py-3">Counter</th>
                 <th className="px-4 py-3">No. of Tap</th>
-                <th className="px-4 py-3">Application / Request</th>
                 <th className="px-4 py-3">Installment</th>
                 <th className="px-4 py-3">Full Fee</th>
                 <th className="px-4 py-3">Remarks</th>
@@ -463,10 +438,9 @@ export function Tap() {
               {records.map((record) => (
                 <tr key={record.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">Ward {record.ward_no}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-700">{formatDate(record.record_date)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-slate-700">{formatBsDate(record.record_date)}</td>
                   <td className="px-4 py-3 text-slate-700">{record.category}</td>
                   <td className="px-4 py-3 font-semibold text-slate-900">{record.tap_count}</td>
-                  <td className="px-4 py-3 text-slate-600">{record.application_request || '-'}</td>
                   <td className="px-4 py-3 text-slate-600">{formatMoney(record.water_tap_installment)}</td>
                   <td className="px-4 py-3 text-slate-600">{formatMoney(record.water_tap_full_fee)}</td>
                   <td className="px-4 py-3 text-slate-600">{record.remarks || '-'}</td>
@@ -494,7 +468,7 @@ export function Tap() {
               ))}
               {records.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-6 text-center text-slate-500">
+                  <td colSpan={8} className="px-4 py-6 text-center text-slate-500">
                     No tap records found.
                   </td>
                 </tr>

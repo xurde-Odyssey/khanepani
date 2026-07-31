@@ -502,14 +502,14 @@ export function Dashboard() {
               <tr className="bg-slate-100">
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-left">Ward</th>
-                <th className="px-3 py-2 text-left">Category</th>
+                <th className="px-3 py-2 text-left">Counter</th>
                 <th className="px-3 py-2 text-right">Taps</th>
               </tr>
             </thead>
             <tbody>
               {recordsSnapshot.tapRecords.slice(0, 6).map((record) => (
                 <tr key={record.id} className="odd:bg-white even:bg-slate-50">
-                  <td className="px-3 py-2">{record.record_date}</td>
+                  <td className="px-3 py-2">{formatBsDate(record.record_date)}</td>
                   <td className="px-3 py-2">Ward {record.ward_no}</td>
                   <td className="px-3 py-2">{record.category}</td>
                   <td className="px-3 py-2 text-right">{record.tap_count}</td>
