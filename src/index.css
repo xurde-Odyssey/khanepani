@@ -49,6 +49,7 @@ body { @apply bg-slate-50 text-slate-900; }
   }
 
   nav,
+  footer,
   button {
     display: none !important;
   }
@@ -59,7 +60,23 @@ body { @apply bg-slate-50 text-slate-900; }
   }
 
   table {
+    width: 100% !important;
+    border-collapse: collapse !important;
     page-break-inside: auto;
+  }
+
+  th,
+  td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 6px 8px !important;
+    color: #0f172a !important;
+    text-align: left !important;
+    vertical-align: top !important;
+  }
+
+  th {
+    background: #f1f5f9 !important;
+    font-weight: 700 !important;
   }
 
   tr {

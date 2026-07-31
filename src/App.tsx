@@ -25,7 +25,7 @@ export default function App() {
       >
         <Route path="/" element={<Dashboard />} />
         <Route path="/entry" element={<DataEntry />} />
-        <Route path="/entry/bulk" element={<BulkEntryGrid />} />
+        <Route path="/bulk-grid" element={<BulkEntryGrid />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/reports/detail" element={<ReportDetail />} />
         <Route path="/admin" element={<Admin />} />

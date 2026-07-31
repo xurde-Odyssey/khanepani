@@ -9,7 +9,7 @@ type NavItem =
 const NAV: NavItem[] = [
   { type: 'link', to: '/', label: 'Dashboard' },
   { type: 'link', to: '/entry', label: 'Data Entry' },
-  { type: 'link', to: '/entry/bulk', label: 'Bulk Grid' },
+  { type: 'link', to: '/bulk-grid', label: 'Bulk Grid' },
   { type: 'link', to: '/reports', label: 'Reports' },
   { type: 'link', to: '/admin', label: 'Admin' },
   { type: 'heading', label: 'Records' },
@@ -38,13 +38,11 @@ function SignOutIcon() {
 }
 
 export function Layout() {
-  const { profile, signOut } = useAuth()
-  const displayName = profile?.full_name || 'Signed in'
-  const roleLabel = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : 'Account'
+  const { signOut } = useAuth()
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
-      <nav className="md:w-56 bg-brand-700 text-white flex md:flex-col shrink-0">
+    <div className="min-h-screen flex flex-col md:block">
+      <nav className="bg-brand-700 text-white flex shrink-0 md:fixed md:inset-y-0 md:left-0 md:z-30 md:w-56 md:flex-col md:overflow-y-auto">
         <div className="px-4 py-4 font-semibold text-lg hidden md:block">Water Supply</div>
         <div className="flex md:flex-col overflow-x-auto md:overflow-visible flex-1">
           {NAV.map((item) =>
@@ -74,28 +72,41 @@ export function Layout() {
           )}
         </div>
         <div className="border-l border-white/10 p-2 md:mt-auto md:border-l-0 md:border-t md:p-3">
-          <div className="hidden items-center gap-3 rounded-lg bg-white/10 px-3 py-3 md:flex">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-sm font-semibold">
-              {displayName.slice(0, 1).toUpperCase()}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium">{displayName}</span>
-              <span className="block truncate text-xs text-white/70">{roleLabel}</span>
-            </span>
-          </div>
           <button
             onClick={() => signOut()}
-            className="mt-0 flex h-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white/90 hover:bg-white/10 md:mt-2 md:w-full md:justify-start"
-            title="Sign out"
+            className="flex h-full items-center justify-center gap-2 rounded-lg border border-red-300/40 bg-red-500/20 px-3 py-2 text-sm font-semibold text-red-50 hover:bg-red-500/30 md:w-full md:justify-start"
+            title="Logout"
           >
               <SignOutIcon />
-              <span className="hidden md:inline">Sign out</span>
-              <span className="md:hidden">Logout</span>
+              <span>Logout</span>
           </button>
         </div>
       </nav>
-      <main className="flex-1 p-4 md:p-8 overflow-x-auto">
-        <Outlet />
+      <main className="flex-1 overflow-y-auto overflow-x-auto p-4 md:ml-56 md:h-screen md:p-8">
+        <div className="flex min-h-full flex-col">
+          <div className="flex-1">
+            <Outlet />
+          </div>
+          <footer className="mt-8 flex flex-col gap-2 border-t border-slate-200 pt-4 text-center text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:text-left print:hidden">
+            <p className="m-0">Copyright 2026. All rights reserved.</p>
+            <p className="designer-credit">
+              <span>Designed by</span>
+              <a href="https://www.bhandaridipesh.com.np/" target="_blank" rel="noopener noreferrer">
+                Xurde
+              </a>
+              <span className="designer-credit__separator" aria-hidden="true">•</span>
+              <span>Founder,</span>
+              <a
+                className="designer-credit__company"
+                href="https://www.concoretechnologies.com.np/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Concore Technologies
+              </a>
+            </p>
+          </footer>
+        </div>
       </main>
     </div>
   )

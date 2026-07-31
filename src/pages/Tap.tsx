@@ -67,6 +67,40 @@ function TrashIcon() {
   )
 }
 
+function SpreadsheetIcon() {
+  return (
+    <Icon>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M8 13h8" />
+      <path d="M8 17h8" />
+      <path d="M10 9H8" />
+    </Icon>
+  )
+}
+
+function PdfIcon() {
+  return (
+    <Icon>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M8 15h1.5a1.5 1.5 0 0 0 0-3H8v5" />
+      <path d="M13 12v5" />
+      <path d="M13 12h1a2.5 2.5 0 0 1 0 5h-1" />
+    </Icon>
+  )
+}
+
+function PrintIcon() {
+  return (
+    <Icon>
+      <path d="M6 9V2h12v7" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+      <path d="M6 14h12v8H6z" />
+    </Icon>
+  )
+}
+
 function toForm(record: TapRecord): TapForm {
   return {
     record_date: record.record_date,
@@ -240,15 +274,15 @@ export function Tap() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      <div>
+    <div className="space-y-6 max-w-6xl print:max-w-none print:space-y-0">
+      <div className="print:hidden">
         <h1 className="text-2xl font-semibold text-slate-900">Tap Records</h1>
         <p className="mt-1 text-sm text-slate-500">Ward-wise tap record keeping with quick totals for reporting.</p>
       </div>
 
-      {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 print:hidden">{error}</p>}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[0.8fr_1.2fr] gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[0.8fr_1.2fr] gap-6 print:hidden">
         <section className="bg-white rounded-xl shadow border border-slate-100 p-5">
           <h2 className="font-semibold text-slate-900">{editing ? 'Edit tap record' : 'Add tap record'}</h2>
           <form onSubmit={saveRecord} className="mt-4 space-y-4">
@@ -377,13 +411,28 @@ export function Tap() {
               <BsDateInput label="End Nepali date" value={reportEnd} onChange={setReportEnd} allowClear />
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={exportExcel} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <button
+                type="button"
+                onClick={exportExcel}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+              >
+                <SpreadsheetIcon />
                 Export Excel
               </button>
-              <button type="button" onClick={exportPdf} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <button
+                type="button"
+                onClick={exportPdf}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+              >
+                <PdfIcon />
                 Export PDF
               </button>
-              <button type="button" onClick={() => window.print()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                <PrintIcon />
                 Print
               </button>
             </div>
@@ -418,7 +467,41 @@ export function Tap() {
         </section>
       </div>
 
-      <section className="bg-white rounded-xl shadow border border-slate-100 p-5">
+      <section className="hidden print:block">
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <th>Ward</th>
+              <th>Date</th>
+              <th>Counter</th>
+              <th>No. of Tap</th>
+              <th>Installment</th>
+              <th>Full Fee</th>
+              <th>Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.filteredRecords.map((record) => (
+              <tr key={record.id}>
+                <td>Ward {record.ward_no}</td>
+                <td>{formatBsDate(record.record_date)}</td>
+                <td>{record.category}</td>
+                <td>{record.tap_count}</td>
+                <td>{formatMoney(record.water_tap_installment)}</td>
+                <td>{formatMoney(record.water_tap_full_fee)}</td>
+                <td>{record.remarks || '-'}</td>
+              </tr>
+            ))}
+            {report.filteredRecords.length === 0 && (
+              <tr>
+                <td colSpan={7}>No tap records found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="bg-white rounded-xl shadow border border-slate-100 p-5 print:hidden">
         <h2 className="font-semibold text-slate-900">All tap records</h2>
         <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full text-sm">

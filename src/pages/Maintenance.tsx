@@ -86,6 +86,40 @@ function TrashIcon() {
   )
 }
 
+function SpreadsheetIcon() {
+  return (
+    <Icon>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M8 13h8" />
+      <path d="M8 17h8" />
+      <path d="M10 9H8" />
+    </Icon>
+  )
+}
+
+function PdfIcon() {
+  return (
+    <Icon>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M8 15h1.5a1.5 1.5 0 0 0 0-3H8v5" />
+      <path d="M13 12v5" />
+      <path d="M13 12h1a2.5 2.5 0 0 1 0 5h-1" />
+    </Icon>
+  )
+}
+
+function PrintIcon() {
+  return (
+    <Icon>
+      <path d="M6 9V2h12v7" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+      <path d="M6 14h12v8H6z" />
+    </Icon>
+  )
+}
+
 function CalendarIcon() {
   return (
     <Icon>
@@ -237,15 +271,15 @@ export function Maintenance() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      <div>
+    <div className="space-y-6 max-w-6xl print:max-w-none print:space-y-0">
+      <div className="print:hidden">
         <h1 className="text-2xl font-semibold text-slate-900">Maintenance</h1>
         <p className="mt-1 text-sm text-slate-500">Track completed maintenance work, equipment used, and remarks.</p>
       </div>
 
-      {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 print:hidden">{error}</p>}
 
-      <section className="bg-white rounded-xl shadow border border-slate-100 p-5">
+      <section className="bg-white rounded-xl shadow border border-slate-100 p-5 print:hidden">
         <div className="flex items-center gap-2">
           <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
             <CalendarIcon />
@@ -336,8 +370,8 @@ export function Maintenance() {
         </form>
       </section>
 
-      <section className="bg-white rounded-xl shadow border border-slate-100 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <section className="bg-white rounded-xl shadow border border-slate-100 p-5 print:border-0 print:p-0 print:shadow-none">
+        <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
           <div>
             <h2 className="font-semibold text-slate-900">Maintenance log</h2>
             <p className="mt-1 text-xs text-slate-500">
@@ -351,18 +385,33 @@ export function Maintenance() {
             <BsDateInput label="End Nepali date" value={reportEnd} onChange={setReportEnd} allowClear />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={exportExcel} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <button
+              type="button"
+              onClick={exportExcel}
+              className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+            >
+              <SpreadsheetIcon />
               Export Excel
             </button>
-            <button type="button" onClick={exportPdf} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <button
+              type="button"
+              onClick={exportPdf}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+            >
+              <PdfIcon />
               Export PDF
             </button>
-            <button type="button" onClick={() => window.print()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              <PrintIcon />
               Print
             </button>
           </div>
         </div>
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 print:mt-0 print:overflow-visible print:rounded-none print:border-0">
           <table className="w-full text-sm">
             <thead className="bg-slate-100">
               <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -372,7 +421,7 @@ export function Maintenance() {
                 <th className="px-4 py-3">Description</th>
                 <th className="px-4 py-3">Equipments used</th>
                 <th className="px-4 py-3">Remarks</th>
-                <th className="px-4 py-3 text-right">Action</th>
+                <th className="px-4 py-3 text-right print:hidden">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -384,7 +433,7 @@ export function Maintenance() {
                   <td className="px-4 py-3 min-w-64 text-slate-700">{record.description}</td>
                   <td className="px-4 py-3 min-w-48 text-slate-600">{record.equipments_used || '-'}</td>
                   <td className="px-4 py-3 min-w-48 text-slate-600">{record.remarks || '-'}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 print:hidden">
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
