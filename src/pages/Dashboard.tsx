@@ -16,7 +16,7 @@ import {
 } from 'chart.js'
 import { supabase } from '../lib/supabase'
 import { formatBsDate, formatBsShortDate } from '../lib/bsCalendar'
-import type { DailyEntry, Pump } from '../types/database'
+import type { DailyEntry, MaintenanceRecord, Pump, TapRecord } from '../types/database'
 
 ChartJS.register(CategoryScale, LinearScale, RadialLinearScale, BarElement, LineElement, PointElement, Filler, Tooltip, Legend)
 
@@ -47,6 +47,15 @@ interface DailySnapshot {
   date: string
   production: number
   operatingHours: number
+}
+
+interface RecordsSnapshot {
+  tapRecords: TapRecord[]
+  maintenanceRecords: MaintenanceRecord[]
+  totalTaps: number
+  tapInstallmentTotal: number
+  tapFullFeeTotal: number
+  topTapWard: { ward: number; total: number } | null
 }
 
 type DashboardPeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
@@ -105,6 +114,14 @@ export function Dashboard() {
   const [yesterdayProduction, setYesterdayProduction] = useState(0)
   const [pumpSnapshots, setPumpSnapshots] = useState<PumpSnapshot[]>([])
   const [dailySnapshots, setDailySnapshots] = useState<DailySnapshot[]>([])
+  const [recordsSnapshot, setRecordsSnapshot] = useState<RecordsSnapshot>({
+    tapRecords: [],
+    maintenanceRecords: [],
+    totalTaps: 0,
+    tapInstallmentTotal: 0,
+    tapFullFeeTotal: 0,
+    topTapWard: null,
+  })
   const [alerts, setAlerts] = useState<PumpAlert[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -125,6 +142,37 @@ export function Dashboard() {
         .select('*')
         .gte('entry_date', startStr)
         .lte('entry_date', todayStr)
+
+      const [{ data: tapRows }, { data: maintenanceRows }] = await Promise.all([
+        supabase
+          .from('tap_records')
+          .select('*')
+          .gte('record_date', startStr)
+          .lte('record_date', todayStr)
+          .order('record_date', { ascending: false }),
+        supabase
+          .from('maintenance_records')
+          .select('*')
+          .gte('maintenance_date', startStr)
+          .lte('maintenance_date', todayStr)
+          .order('maintenance_date', { ascending: false }),
+      ])
+
+      const tapRecords = (tapRows ?? []) as TapRecord[]
+      const maintenanceRecords = (maintenanceRows ?? []) as MaintenanceRecord[]
+      const wardTotals = new Map<number, number>()
+      tapRecords.forEach((record) => {
+        wardTotals.set(record.ward_no, (wardTotals.get(record.ward_no) ?? 0) + record.tap_count)
+      })
+      const topTapWardEntry = [...wardTotals.entries()].sort((a, b) => b[1] - a[1])[0]
+      setRecordsSnapshot({
+        tapRecords,
+        maintenanceRecords,
+        totalTaps: tapRecords.reduce((sum, record) => sum + record.tap_count, 0),
+        tapInstallmentTotal: tapRecords.reduce((sum, record) => sum + Number(record.water_tap_installment ?? 0), 0),
+        tapFullFeeTotal: tapRecords.reduce((sum, record) => sum + Number(record.water_tap_full_fee ?? 0), 0),
+        topTapWard: topTapWardEntry ? { ward: topTapWardEntry[0], total: topTapWardEntry[1] } : null,
+      })
 
       const monthEntries = (entries ?? []) as DailyEntry[]
       setTodayProduction(productionTotal(monthEntries.filter((entry) => entry.entry_date === todayStr)))
@@ -219,6 +267,7 @@ export function Dashboard() {
   const flowmeterVariance = (monthTotals?.production ?? 0) - (monthTotals?.flowmeter_total ?? 0)
   const selectedRange = dashboardRange(period)
   const periodLabel = labelForPeriod(period)
+  const latestMaintenance = recordsSnapshot.maintenanceRecords[0]
   const radarSnapshots = dailySnapshots.slice(-7)
   const chartOptions = { responsive: true, plugins: { legend: { position: 'top' as const } } }
   const productionTrendData = {
@@ -346,6 +395,36 @@ export function Dashboard() {
         />
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatCard
+          label={`Tap records - ${periodLabel}`}
+          value={String(recordsSnapshot.totalTaps)}
+          detail={
+            <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+              <StatCardDetail label="Installment" value={fmt(recordsSnapshot.tapInstallmentTotal, 0)} />
+              <StatCardDetail label="Full fee" value={fmt(recordsSnapshot.tapFullFeeTotal, 0)} />
+            </div>
+          }
+        />
+        <StatCard
+          label="Top tap ward"
+          value={recordsSnapshot.topTapWard ? `Ward ${recordsSnapshot.topTapWard.ward}` : '—'}
+          detail={
+            recordsSnapshot.topTapWard ? (
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <StatCardDetail label="Tap count" value={String(recordsSnapshot.topTapWard.total)} />
+              </div>
+            ) : undefined
+          }
+        />
+        <StatCard label={`Maintenance - ${periodLabel}`} value={String(recordsSnapshot.maintenanceRecords.length)} />
+        <InsightCard
+          title="Latest maintenance"
+          value={latestMaintenance?.title || '—'}
+          detail={latestMaintenance ? `${latestMaintenance.maintenance_date} by ${latestMaintenance.done_by}` : 'No maintenance record in this period'}
+        />
+      </div>
+
       <div className="bg-white rounded-xl shadow p-5">
         <h2 className="font-medium text-slate-800 mb-3">Pump production - {periodLabel}</h2>
         <div className="min-h-80">
@@ -411,6 +490,72 @@ export function Dashboard() {
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl shadow overflow-x-auto">
+          <div className="px-5 py-4 border-b border-slate-200">
+            <h2 className="font-medium text-slate-800">Tap records glance</h2>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-left">Ward</th>
+                <th className="px-3 py-2 text-left">Category</th>
+                <th className="px-3 py-2 text-right">Taps</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recordsSnapshot.tapRecords.slice(0, 6).map((record) => (
+                <tr key={record.id} className="odd:bg-white even:bg-slate-50">
+                  <td className="px-3 py-2">{record.record_date}</td>
+                  <td className="px-3 py-2">Ward {record.ward_no}</td>
+                  <td className="px-3 py-2">{record.category}</td>
+                  <td className="px-3 py-2 text-right">{record.tap_count}</td>
+                </tr>
+              ))}
+              {recordsSnapshot.tapRecords.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-3 py-5 text-center text-slate-500">
+                    No tap records in this period.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="bg-white rounded-xl shadow overflow-x-auto">
+          <div className="px-5 py-4 border-b border-slate-200">
+            <h2 className="font-medium text-slate-800">Maintenance glance</h2>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-left">Title</th>
+                <th className="px-3 py-2 text-left">Done by</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recordsSnapshot.maintenanceRecords.slice(0, 6).map((record) => (
+                <tr key={record.id} className="odd:bg-white even:bg-slate-50">
+                  <td className="px-3 py-2">{record.maintenance_date}</td>
+                  <td className="px-3 py-2">{record.title || 'Maintenance'}</td>
+                  <td className="px-3 py-2">{record.done_by}</td>
+                </tr>
+              ))}
+              {recordsSnapshot.maintenanceRecords.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-3 py-5 text-center text-slate-500">
+                    No maintenance records in this period.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )

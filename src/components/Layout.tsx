@@ -2,13 +2,20 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import clsx from 'clsx'
 
-const NAV = [
-  { to: '/', label: 'Dashboard' },
-  { to: '/entry', label: 'Data Entry' },
-  { to: '/entry/bulk', label: 'Bulk Grid' },
-  { to: '/reports', label: 'Reports' },
-  { to: '/admin', label: 'Admin' },
-  { to: '/notes', label: 'Notes' },
+type NavItem =
+  | { type: 'link'; to: string; label: string; child?: boolean }
+  | { type: 'heading'; label: string }
+
+const NAV: NavItem[] = [
+  { type: 'link', to: '/', label: 'Dashboard' },
+  { type: 'link', to: '/entry', label: 'Data Entry' },
+  { type: 'link', to: '/entry/bulk', label: 'Bulk Grid' },
+  { type: 'link', to: '/reports', label: 'Reports' },
+  { type: 'link', to: '/admin', label: 'Admin' },
+  { type: 'heading', label: 'Records' },
+  { type: 'link', to: '/tap', label: 'Tap', child: true },
+  { type: 'link', to: '/maintenance', label: 'Maintenance', child: true },
+  { type: 'link', to: '/notes', label: 'Notes', child: true },
 ]
 
 function SignOutIcon() {
@@ -40,21 +47,31 @@ export function Layout() {
       <nav className="md:w-56 bg-brand-700 text-white flex md:flex-col shrink-0">
         <div className="px-4 py-4 font-semibold text-lg hidden md:block">Water Supply</div>
         <div className="flex md:flex-col overflow-x-auto md:overflow-visible flex-1">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                clsx(
-                  'px-4 py-3 text-sm whitespace-nowrap md:whitespace-normal',
-                  isActive ? 'bg-brand-600 font-medium' : 'hover:bg-brand-600/60'
-                )
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
+          {NAV.map((item) =>
+            item.type === 'heading' ? (
+              <div
+                key={item.label}
+                className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/60 md:pb-1 md:pt-4"
+              >
+                {item.label}
+              </div>
+            ) : (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  clsx(
+                    'px-4 py-3 text-sm whitespace-nowrap md:whitespace-normal',
+                    item.child && 'md:py-2 md:pl-8 text-xs md:text-sm bg-brand-800/20',
+                    isActive ? 'bg-brand-600 font-medium' : 'hover:bg-brand-600/60'
+                  )
+                }
+              >
+                {item.label}
+              </NavLink>
+            )
+          )}
         </div>
         <div className="border-l border-white/10 p-2 md:mt-auto md:border-l-0 md:border-t md:p-3">
           <div className="hidden items-center gap-3 rounded-lg bg-white/10 px-3 py-3 md:flex">

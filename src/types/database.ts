@@ -48,6 +48,33 @@ export type Profile = {
   project_id: string | null
 } & Record<string, unknown>
 
+export type TapRecord = {
+  id: string
+  record_date: string
+  ward_no: number
+  category: string
+  tap_count: number
+  application_request: string | null
+  water_tap_installment: number | null
+  water_tap_full_fee: number | null
+  remarks: string | null
+  created_at: string
+  updated_at: string
+} & Record<string, unknown>
+
+export type MaintenanceRecord = {
+  id: string
+  maintenance_date: string
+  title: string | null
+  done_by: string
+  description: string
+  work_time: string | null
+  equipments_used: string | null
+  remarks: string | null
+  created_at: string
+  updated_at: string
+} & Record<string, unknown>
+
 export const DAILY_VARIABLES = [
   'operating_hours',
   'flowmeter_start_unit',
@@ -104,6 +131,13 @@ export interface Database {
             referencedColumns: ['id']
           },
         ]
+      }
+      tap_records: { Row: TapRecord; Insert: Partial<TapRecord>; Update: Partial<TapRecord>; Relationships: [] }
+      maintenance_records: {
+        Row: MaintenanceRecord
+        Insert: Partial<MaintenanceRecord>
+        Update: Partial<MaintenanceRecord>
+        Relationships: []
       }
     }
     Views: {
