@@ -14,7 +14,7 @@ const NAV: NavItem[] = [
   { type: 'link', to: '/admin', label: 'Admin' },
   { type: 'heading', label: 'Records' },
   { type: 'link', to: '/tap', label: 'Tap', child: true },
-  { type: 'link', to: '/maintenance', label: 'Maintenance', child: true },
+  { type: 'link', to: '/maintenance', label: 'Pipeline Maintenance', child: true },
   { type: 'link', to: '/notes', label: 'Notes', child: true },
 ]
 

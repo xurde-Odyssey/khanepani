@@ -67,6 +67,12 @@ export type MaintenanceRecord = {
   maintenance_date: string
   title: string | null
   done_by: string
+  no_of_people: number | null
+  people_names: string[] | null
+  start_time: string | null
+  end_time: string | null
+  total_time_minutes: number | null
+  location: string | null
   description: string
   work_time: string | null
   equipments_used: string | null

@@ -417,11 +417,11 @@ export function Dashboard() {
             ) : undefined
           }
         />
-        <StatCard label={`Maintenance - ${periodLabel}`} value={String(recordsSnapshot.maintenanceRecords.length)} />
+        <StatCard label={`Pipeline Maintenance - ${periodLabel}`} value={String(recordsSnapshot.maintenanceRecords.length)} />
         <InsightCard
-          title="Latest maintenance"
+          title="Latest pipeline maintenance"
           value={latestMaintenance?.title || '—'}
-          detail={latestMaintenance ? `${latestMaintenance.maintenance_date} by ${latestMaintenance.done_by}` : 'No maintenance record in this period'}
+          detail={latestMaintenance ? `${latestMaintenance.maintenance_date} by ${latestMaintenance.done_by}` : 'No pipeline maintenance record in this period'}
         />
       </div>
 
@@ -528,7 +528,7 @@ export function Dashboard() {
 
         <div className="bg-white rounded-xl shadow overflow-x-auto">
           <div className="px-5 py-4 border-b border-slate-200">
-            <h2 className="font-medium text-slate-800">Maintenance glance</h2>
+            <h2 className="font-medium text-slate-800">Pipeline maintenance glance</h2>
           </div>
           <table className="w-full text-sm">
             <thead>
@@ -542,14 +542,14 @@ export function Dashboard() {
               {recordsSnapshot.maintenanceRecords.slice(0, 6).map((record) => (
                 <tr key={record.id} className="odd:bg-white even:bg-slate-50">
                   <td className="px-3 py-2">{record.maintenance_date}</td>
-                  <td className="px-3 py-2">{record.title || 'Maintenance'}</td>
+                  <td className="px-3 py-2">{record.title || 'Pipeline Maintenance'}</td>
                   <td className="px-3 py-2">{record.done_by}</td>
                 </tr>
               ))}
               {recordsSnapshot.maintenanceRecords.length === 0 && (
                 <tr>
                   <td colSpan={3} className="px-3 py-5 text-center text-slate-500">
-                    No maintenance records in this period.
+                    No pipeline maintenance records in this period.
                   </td>
                 </tr>
               )}
