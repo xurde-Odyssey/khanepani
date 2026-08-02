@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Project, Pump } from '../types/database'
+import type { Project, Pump, WorkerName } from '../types/database'
 
 type PumpWithProject = Pump & {
   projects?: Pick<Project, 'name'> | null
@@ -82,15 +82,22 @@ export function Admin() {
   const [editIsActive, setEditIsActive] = useState(true)
   const [deleteTarget, setDeleteTarget] = useState<PumpWithProject | null>(null)
   const [pumpError, setPumpError] = useState('')
+  const [workerNames, setWorkerNames] = useState<WorkerName[]>([])
+  const [newWorkerName, setNewWorkerName] = useState('')
+  const [workerError, setWorkerError] = useState('')
 
   async function loadAll() {
-    const { data: pumpRows } = await supabase.from('pumps').select('*, projects(name)').order('pump_no')
+    const [{ data: pumpRows }, { data: workerRows }] = await Promise.all([
+      supabase.from('pumps').select('*, projects(name)').order('pump_no'),
+      supabase.from('worker_names').select('*').order('name'),
+    ])
     const sortedPumps = ((pumpRows ?? []) as PumpWithProject[]).sort((a, b) => {
       const projectCompare = projectNameSorter.compare(a.projects?.name ?? '', b.projects?.name ?? '')
       if (projectCompare !== 0) return projectCompare
       return a.pump_no - b.pump_no
     })
     setPumps(sortedPumps)
+    setWorkerNames((workerRows ?? []) as WorkerName[])
   }
 
   useEffect(() => {
@@ -206,6 +213,33 @@ export function Admin() {
     loadAll()
   }
 
+  async function addWorkerName(e: FormEvent) {
+    e.preventDefault()
+    const name = newWorkerName.trim()
+    if (!name) return
+
+    setWorkerError('')
+    const { error } = await supabase.from('worker_names').insert({ name, is_active: true })
+
+    if (error) {
+      setWorkerError(error.message)
+      return
+    }
+
+    setNewWorkerName('')
+    loadAll()
+  }
+
+  async function deleteWorkerName(worker: WorkerName) {
+    setWorkerError('')
+    const { error } = await supabase.from('worker_names').delete().eq('id', worker.id)
+    if (error) {
+      setWorkerError(error.message)
+      return
+    }
+    loadAll()
+  }
+
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-semibold text-slate-900">Admin</h1>
@@ -288,6 +322,62 @@ export function Admin() {
           </div>
           <button className="rounded-lg bg-brand-600 text-white px-4 py-2 text-sm">Add Pump</button>
         </form>
+      </section>
+
+      <section className="bg-white rounded-xl shadow p-5">
+        <h2 className="font-medium text-slate-800 mb-3">Pipeline maintenance workers</h2>
+        {workerError && (
+          <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {workerError}
+          </p>
+        )}
+        <form onSubmit={addWorkerName} className="mb-4 flex flex-wrap items-end gap-2">
+          <div>
+            <label className="block text-xs font-medium mb-1">Worker name</label>
+            <input
+              value={newWorkerName}
+              onChange={(e) => setNewWorkerName(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </div>
+          <button className="rounded-lg bg-brand-600 text-white px-4 py-2 text-sm">Add Worker</button>
+        </form>
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-100">
+              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {workerNames.map((worker) => (
+                <tr key={worker.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-medium text-slate-900">{worker.name}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => deleteWorkerName(worker)}
+                        title="Delete worker name"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {workerNames.length === 0 && (
+                <tr>
+                  <td colSpan={2} className="px-4 py-6 text-center text-slate-500">
+                    No worker names found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {editingPump && (

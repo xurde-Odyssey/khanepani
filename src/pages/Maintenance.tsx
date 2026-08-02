@@ -6,7 +6,7 @@ import autoTable from 'jspdf-autotable'
 import { supabase } from '../lib/supabase'
 import { BsDateInput } from '../components/BsDateInput'
 import { formatBsDate } from '../lib/bsCalendar'
-import type { MaintenanceRecord } from '../types/database'
+import type { MaintenanceRecord, WorkerName } from '../types/database'
 
 type MaintenanceForm = {
   maintenance_date: string
@@ -211,24 +211,38 @@ function toForm(record: MaintenanceRecord): MaintenanceForm {
 
 export function Maintenance() {
   const [records, setRecords] = useState<MaintenanceRecord[]>([])
+  const [workerNames, setWorkerNames] = useState<WorkerName[]>([])
   const [form, setForm] = useState<MaintenanceForm>(emptyMaintenanceForm)
   const [reportStart, setReportStart] = useState('')
   const [reportEnd, setReportEnd] = useState('')
+  const [reportWorker, setReportWorker] = useState('')
   const [editing, setEditing] = useState<MaintenanceRecord | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<MaintenanceRecord | null>(null)
   const [error, setError] = useState('')
 
   async function loadRecords() {
-    const { data, error: loadError } = await supabase
-      .from('maintenance_records')
-      .select('*')
-      .order('maintenance_date', { ascending: false })
+    const [{ data, error: loadError }, { data: workerRows, error: workerLoadError }] = await Promise.all([
+      supabase
+        .from('maintenance_records')
+        .select('*')
+        .order('maintenance_date', { ascending: false }),
+      supabase
+        .from('worker_names')
+        .select('*')
+        .eq('is_active', true)
+        .order('name'),
+    ])
 
     if (loadError) {
       setError(loadError.message)
       return
     }
+    if (workerLoadError) {
+      setError(workerLoadError.message)
+      return
+    }
     setRecords((data ?? []) as MaintenanceRecord[])
+    setWorkerNames((workerRows ?? []) as WorkerName[])
   }
 
   useEffect(() => {
@@ -240,9 +254,13 @@ export function Maintenance() {
       records.filter((record) => {
         if (reportStart && record.maintenance_date < reportStart) return false
         if (reportEnd && record.maintenance_date > reportEnd) return false
+        if (reportWorker) {
+          const peopleNames = Array.isArray(record.people_names) ? record.people_names : []
+          if (!peopleNames.includes(reportWorker)) return false
+        }
         return true
       }),
-    [records, reportStart, reportEnd]
+    [records, reportStart, reportEnd, reportWorker]
   )
   const totalTimeMinutes = calculateTotalMinutes(form.start_time, form.end_time)
 
@@ -440,6 +458,7 @@ export function Maintenance() {
               {form.people_names.map((name, index) => (
                 <div key={index} className="flex gap-2">
                   <input
+                    list="pipeline-worker-names"
                     required
                     value={name}
                     onChange={(e) => {
@@ -463,6 +482,11 @@ export function Maintenance() {
                 </div>
               ))}
             </div>
+            <datalist id="pipeline-worker-names">
+              {workerNames.map((worker) => (
+                <option key={worker.id} value={worker.name} />
+              ))}
+            </datalist>
           </div>
           <div className="lg:col-span-2">
             <label className="block text-sm font-medium mb-1">Start time</label>
@@ -563,6 +587,21 @@ export function Maintenance() {
           <div className="max-w-xl space-y-3">
             <BsDateInput label="Start Nepali date" value={reportStart} onChange={setReportStart} allowClear />
             <BsDateInput label="End Nepali date" value={reportEnd} onChange={setReportEnd} allowClear />
+            <div>
+              <label className="block text-sm font-medium mb-1">Worker</label>
+              <select
+                value={reportWorker}
+                onChange={(e) => setReportWorker(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+              >
+                <option value="">All workers</option>
+                {workerNames.map((worker) => (
+                  <option key={worker.id} value={worker.name}>
+                    {worker.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
