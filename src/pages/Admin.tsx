@@ -84,7 +84,14 @@ export function Admin() {
   const [pumpError, setPumpError] = useState('')
   const [workerNames, setWorkerNames] = useState<WorkerName[]>([])
   const [newWorkerName, setNewWorkerName] = useState('')
+  const [editingWorker, setEditingWorker] = useState<WorkerName | null>(null)
+  const [editWorkerName, setEditWorkerName] = useState('')
+  const [deleteWorkerTarget, setDeleteWorkerTarget] = useState<WorkerName | null>(null)
+  const [workerSortDirection, setWorkerSortDirection] = useState<'asc' | 'desc'>('asc')
   const [workerError, setWorkerError] = useState('')
+  const sortedWorkerNames = [...workerNames].sort((a, b) =>
+    workerSortDirection === 'asc' ? projectNameSorter.compare(a.name, b.name) : projectNameSorter.compare(b.name, a.name)
+  )
 
   async function loadAll() {
     const [{ data: pumpRows }, { data: workerRows }] = await Promise.all([
@@ -230,6 +237,32 @@ export function Admin() {
     loadAll()
   }
 
+  function openEditWorkerName(worker: WorkerName) {
+    setWorkerError('')
+    setEditingWorker(worker)
+    setEditWorkerName(worker.name)
+  }
+
+  async function saveWorkerNameEdit(e: FormEvent) {
+    e.preventDefault()
+    if (!editingWorker) return
+
+    const name = editWorkerName.trim()
+    if (!name) return
+
+    setWorkerError('')
+    const { error } = await supabase.from('worker_names').update({ name }).eq('id', editingWorker.id)
+
+    if (error) {
+      setWorkerError(error.message)
+      return
+    }
+
+    setEditingWorker(null)
+    setEditWorkerName('')
+    loadAll()
+  }
+
   async function deleteWorkerName(worker: WorkerName) {
     setWorkerError('')
     const { error } = await supabase.from('worker_names').delete().eq('id', worker.id)
@@ -237,6 +270,7 @@ export function Admin() {
       setWorkerError(error.message)
       return
     }
+    setDeleteWorkerTarget(null)
     loadAll()
   }
 
@@ -325,7 +359,22 @@ export function Admin() {
       </section>
 
       <section className="bg-white rounded-xl shadow p-5">
-        <h2 className="font-medium text-slate-800 mb-3">Pipeline maintenance workers</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-medium text-slate-800">Pipeline maintenance workers</h2>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setWorkerSortDirection(workerSortDirection === 'asc' ? 'desc' : 'asc')}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Name {workerSortDirection === 'asc' ? 'A-Z' : 'Z-A'}
+            </button>
+            <div className="rounded-lg bg-brand-50 px-4 py-2 text-right">
+              <p className="text-xs font-medium uppercase text-brand-700">Total staff</p>
+              <p className="text-xl font-semibold text-brand-800">{workerNames.length}</p>
+            </div>
+          </div>
+        </div>
         {workerError && (
           <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {workerError}
@@ -351,15 +400,25 @@ export function Admin() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {workerNames.map((worker) => (
+              {sortedWorkerNames.map((worker) => (
                 <tr key={worker.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">{worker.name}</td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
                       <button
                         type="button"
-                        onClick={() => deleteWorkerName(worker)}
+                        onClick={() => openEditWorkerName(worker)}
+                        title="Edit worker name"
+                        aria-label={`Edit ${worker.name}`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100"
+                      >
+                        <EditIcon />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteWorkerTarget(worker)}
                         title="Delete worker name"
+                        aria-label={`Delete ${worker.name}`}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
                       >
                         <TrashIcon />
@@ -450,6 +509,64 @@ export function Admin() {
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white"
               >
                 Delete pump
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingWorker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <form onSubmit={saveWorkerNameEdit} className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Edit worker name</h2>
+            <div className="mt-4">
+              <label className="block text-sm font-medium mb-1">Worker name</label>
+              <input
+                value={editWorkerName}
+                onChange={(e) => setEditWorkerName(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingWorker(null)
+                  setEditWorkerName('')
+                }}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white">
+                Save changes
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {deleteWorkerTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Delete worker name</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Are you sure you want to delete "{deleteWorkerTarget.name}"? This removes the name from future selection lists.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteWorkerTarget(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteWorkerName(deleteWorkerTarget)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white"
+              >
+                Delete worker
               </button>
             </div>
           </div>

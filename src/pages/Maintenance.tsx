@@ -194,6 +194,12 @@ function peopleNamesLabel(record: MaintenanceRecord) {
   return peopleNames.length > 0 ? peopleNames.join(', ') : '-'
 }
 
+function findWorkerNameMatch(workerNames: WorkerName[], value: string) {
+  const search = value.trim().toLowerCase()
+  if (!search) return null
+  return workerNames.find((worker) => worker.name.toLowerCase().startsWith(search))?.name ?? null
+}
+
 function toForm(record: MaintenanceRecord): MaintenanceForm {
   return {
     maintenance_date: record.maintenance_date,
@@ -461,6 +467,15 @@ export function Maintenance() {
                     list="pipeline-worker-names"
                     required
                     value={name}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Tab') return
+                      const match = findWorkerNameMatch(workerNames, name)
+                      if (!match || match === name) return
+                      e.preventDefault()
+                      const peopleNames = [...form.people_names]
+                      peopleNames[index] = match
+                      setForm({ ...form, people_names: peopleNames })
+                    }}
                     onChange={(e) => {
                       const peopleNames = [...form.people_names]
                       peopleNames[index] = e.target.value
