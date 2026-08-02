@@ -9,6 +9,7 @@ import { Reports } from './pages/Reports'
 import { ReportDetail } from './pages/ReportDetail'
 import { Admin } from './pages/Admin'
 import { Maintenance } from './pages/Maintenance'
+import { MaintenanceReport } from './pages/MaintenanceReport'
 import { Notes } from './pages/Notes'
 import { Tap } from './pages/Tap'
 
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/admin" element={<Admin />} />
         <Route path="/tap" element={<Tap />} />
         <Route path="/maintenance" element={<Maintenance />} />
+        <Route path="/maintenance-report" element={<MaintenanceReport />} />
         <Route path="/notes" element={<Notes />} />
       </Route>
     </Routes>

@@ -89,6 +89,24 @@ export type WorkerName = {
   updated_at: string
 } & Record<string, unknown>
 
+export type MaintenanceReportItem = {
+  id: string
+  report_date: string
+  title: string
+  item_count: number
+  remarks: string | null
+  created_at: string
+  updated_at: string
+} & Record<string, unknown>
+
+export type MaintenanceReportTitle = {
+  id: string
+  title: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+} & Record<string, unknown>
+
 export const DAILY_VARIABLES = [
   'operating_hours',
   'flowmeter_start_unit',
@@ -154,6 +172,18 @@ export interface Database {
         Relationships: []
       }
       worker_names: { Row: WorkerName; Insert: Partial<WorkerName>; Update: Partial<WorkerName>; Relationships: [] }
+      maintenance_report_items: {
+        Row: MaintenanceReportItem
+        Insert: Partial<MaintenanceReportItem>
+        Update: Partial<MaintenanceReportItem>
+        Relationships: []
+      }
+      maintenance_report_titles: {
+        Row: MaintenanceReportTitle
+        Insert: Partial<MaintenanceReportTitle>
+        Update: Partial<MaintenanceReportTitle>
+        Relationships: []
+      }
     }
     Views: {
       v_daily_entries_enriched: {

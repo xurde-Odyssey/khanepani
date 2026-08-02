@@ -5,12 +5,11 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { supabase } from '../lib/supabase'
 import { BsDateInput } from '../components/BsDateInput'
-import { formatBsDate } from '../lib/bsCalendar'
+import { formatBsDate, gregorianToBs } from '../lib/bsCalendar'
 import type { MaintenanceRecord, WorkerName } from '../types/database'
 
 type MaintenanceForm = {
   maintenance_date: string
-  title: string
   no_of_people: string
   people_names: string[]
   start_time: string
@@ -21,9 +20,24 @@ type MaintenanceForm = {
   remarks: string
 }
 
+type ReportView = 'details' | 'name' | 'time'
+type TimePeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+
+type NameWiseSummary = {
+  name: string
+  records: number
+  totalTimeMinutes: number
+}
+
+type TimePeriodSummary = {
+  key: string
+  label: string
+  records: number
+  totalTimeMinutes: number
+}
+
 const emptyMaintenanceForm: MaintenanceForm = {
   maintenance_date: new Date().toISOString().slice(0, 10),
-  title: '',
   no_of_people: '',
   people_names: [''],
   start_time: '',
@@ -33,28 +47,6 @@ const emptyMaintenanceForm: MaintenanceForm = {
   equipments_used: '',
   remarks: '',
 }
-
-const maintenanceTitleSuggestions = [
-  '1/2" pipe maintenance',
-  'Meter place change',
-  'Meter Gate valve change',
-  'Pipeline Maintenance',
-  'Closed tap re-open',
-  'Meter Check',
-  'Counter Change',
-  'New Tap Connection',
-  'Hole change',
-  'Water pressure increment',
-  'Meter nut/ nipple Change',
-  'Ferrule change',
-  'Saddle change',
-  'Female socket maintenance/ change',
-  'Union change',
-  'Double connection removed',
-  'Leakage maintenance',
-  'Temporary tap closed',
-  'Miscellaneous',
-]
 
 function Icon({ children }: { children: ReactNode }) {
   return (
@@ -194,16 +186,92 @@ function peopleNamesLabel(record: MaintenanceRecord) {
   return peopleNames.length > 0 ? peopleNames.join(', ') : '-'
 }
 
+function peopleNamesStack(record: MaintenanceRecord) {
+  const peopleNames = Array.isArray(record.people_names) ? record.people_names.filter(Boolean) : []
+  return peopleNames.length > 0 ? peopleNames.join('\n') : '-'
+}
+
 function findWorkerNameMatch(workerNames: WorkerName[], value: string) {
   const search = value.trim().toLowerCase()
   if (!search) return null
   return workerNames.find((worker) => worker.name.toLowerCase().startsWith(search))?.name ?? null
 }
 
+function summarizeByName(records: MaintenanceRecord[]) {
+  const summaries = new Map<string, NameWiseSummary>()
+
+  records.forEach((record) => {
+    const names = Array.isArray(record.people_names) ? record.people_names.filter(Boolean) : []
+    names.forEach((name) => {
+      const summary = summaries.get(name) ?? { name, records: 0, totalTimeMinutes: 0 }
+      summary.records += 1
+      summary.totalTimeMinutes += record.total_time_minutes ?? 0
+      summaries.set(name, summary)
+    })
+  })
+
+  return [...summaries.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function startOfWeek(date: Date) {
+  const copy = new Date(date)
+  const day = copy.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  copy.setDate(copy.getDate() + diff)
+  return copy
+}
+
+function isoDate(date: Date) {
+  return date.toISOString().slice(0, 10)
+}
+
+function periodKeyAndLabel(dateStr: string, period: TimePeriod) {
+  const date = new Date(`${dateStr}T00:00:00`)
+  if (period === 'weekly') {
+    const start = startOfWeek(date)
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    return {
+      key: isoDate(start),
+      label: `${formatBsDate(isoDate(start))} to ${formatBsDate(isoDate(end))}`,
+    }
+  }
+
+  const bs = gregorianToBs(dateStr)
+  if (period === 'monthly') {
+    return { key: `${bs.bs_year}-${bs.bs_month}`, label: `${bs.bs_year} ${bs.bs_month}` }
+  }
+
+  if (period === 'quarterly') {
+    const quarter = Math.floor((['Baishak', 'Jestha', 'Ashar', 'Shrawan', 'Bhadra', 'Ashoj', 'Karthik', 'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'].indexOf(bs.bs_month) / 3)) + 1
+    return { key: `${bs.bs_year}-Q${quarter}`, label: `${bs.bs_year} Q${quarter}` }
+  }
+
+  return { key: String(bs.bs_year), label: String(bs.bs_year) }
+}
+
+function summarizeByTimePeriod(records: MaintenanceRecord[], period: TimePeriod) {
+  const summaries = new Map<string, TimePeriodSummary>()
+
+  records.forEach((record) => {
+    const periodValue = periodKeyAndLabel(record.maintenance_date, period)
+    const summary = summaries.get(periodValue.key) ?? {
+      key: periodValue.key,
+      label: periodValue.label,
+      records: 0,
+      totalTimeMinutes: 0,
+    }
+    summary.records += 1
+    summary.totalTimeMinutes += record.total_time_minutes ?? 0
+    summaries.set(periodValue.key, summary)
+  })
+
+  return [...summaries.values()].sort((a, b) => a.key.localeCompare(b.key))
+}
+
 function toForm(record: MaintenanceRecord): MaintenanceForm {
   return {
     maintenance_date: record.maintenance_date,
-    title: record.title ?? '',
     no_of_people: String(record.no_of_people ?? record.done_by ?? ''),
     people_names: namesFromRecord(record),
     start_time: normalizeTime(record.start_time),
@@ -222,6 +290,8 @@ export function Maintenance() {
   const [reportStart, setReportStart] = useState('')
   const [reportEnd, setReportEnd] = useState('')
   const [reportWorker, setReportWorker] = useState('')
+  const [reportView, setReportView] = useState<ReportView>('details')
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>('monthly')
   const [editing, setEditing] = useState<MaintenanceRecord | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<MaintenanceRecord | null>(null)
   const [error, setError] = useState('')
@@ -268,7 +338,14 @@ export function Maintenance() {
       }),
     [records, reportStart, reportEnd, reportWorker]
   )
+  const nameWiseSummaries = useMemo(() => summarizeByName(reportRecords), [reportRecords])
+  const timePeriodSummaries = useMemo(() => summarizeByTimePeriod(reportRecords, timePeriod), [reportRecords, timePeriod])
   const totalTimeMinutes = calculateTotalMinutes(form.start_time, form.end_time)
+  const reportWorkerLabel = reportWorker || 'All workers'
+  const reportDateRangeLabel =
+    reportStart || reportEnd
+      ? `${reportStart ? formatBsDate(reportStart) : 'Start'} to ${reportEnd ? formatBsDate(reportEnd) : 'End'}`
+      : 'All dates'
 
   function reportFileName(extension: string) {
     const range = reportStart || reportEnd ? `${reportStart || 'start'}-to-${reportEnd || 'end'}` : 'all'
@@ -276,37 +353,93 @@ export function Maintenance() {
   }
 
   function exportExcel() {
-    const rows = reportRecords.map((record) => ({
-      Date: formatBsDate(record.maintenance_date),
-      Title: record.title ?? '',
-      'No of people': record.no_of_people ?? record.done_by,
-      Names: peopleNamesLabel(record),
-      Location: record.location ?? '',
-      'Start time': normalizeTime(record.start_time),
-      'End time': normalizeTime(record.end_time),
-      'Total time': formatTotalTime(record.total_time_minutes ?? null),
-      Description: record.description,
-      'Equipments used': record.equipments_used ?? '',
-      Remarks: record.remarks ?? '',
-    }))
     const wb = XLSX.utils.book_new()
+    const rows =
+      reportView === 'name'
+        ? nameWiseSummaries.map((summary) => ({
+            Name: summary.name,
+            Records: summary.records,
+            'Total time': formatTotalTime(summary.totalTimeMinutes),
+          }))
+        : reportView === 'time'
+          ? timePeriodSummaries.map((summary) => ({
+              Worker: reportWorkerLabel,
+              'Date range': reportDateRangeLabel,
+              Period: summary.label,
+              Records: summary.records,
+              'Total time': formatTotalTime(summary.totalTimeMinutes),
+            }))
+        : reportRecords.map((record) => ({
+            Date: formatBsDate(record.maintenance_date),
+            'No of people': record.no_of_people ?? record.done_by,
+            Names: peopleNamesLabel(record),
+            Location: record.location ?? '',
+            'Start time': normalizeTime(record.start_time),
+            'End time': normalizeTime(record.end_time),
+            'Total time': formatTotalTime(record.total_time_minutes ?? null),
+            Description: record.description,
+            'Equipments used': record.equipments_used ?? '',
+            Remarks: record.remarks ?? '',
+          }))
     const ws = XLSX.utils.json_to_sheet(rows)
-    XLSX.utils.book_append_sheet(wb, ws, 'Pipeline Maintenance Report')
+    XLSX.utils.book_append_sheet(
+      wb,
+      ws,
+      reportView === 'name' ? 'Name Wise Report' : reportView === 'time' ? 'Time Period Report' : 'Pipeline Maintenance Report'
+    )
     XLSX.writeFile(wb, reportFileName('xlsx'))
   }
 
   function exportPdf() {
     const doc = new jsPDF({ orientation: 'landscape' })
-    doc.text('Pipeline Maintenance Report', 14, 14)
+    doc.text(
+      reportView === 'name'
+        ? 'Pipeline Maintenance Name Wise Report'
+        : reportView === 'time'
+          ? 'Pipeline Maintenance Time Period Report'
+          : 'Pipeline Maintenance Report',
+      14,
+      14
+    )
     doc.text(`Records: ${reportRecords.length}`, 14, 22)
+    doc.text(`Worker: ${reportWorkerLabel}`, 14, 30)
+    doc.text(`Date range: ${reportDateRangeLabel}`, 14, 38)
+    if (reportView === 'name') {
+      autoTable(doc, {
+        startY: 44,
+        head: [['Name', 'Records', 'Total time']],
+        body: nameWiseSummaries.map((summary) => [
+          summary.name,
+          summary.records,
+          formatTotalTime(summary.totalTimeMinutes),
+        ]),
+      })
+      doc.save(reportFileName('pdf'))
+      return
+    }
+    if (reportView === 'time') {
+      autoTable(doc, {
+        startY: 44,
+        head: [['Worker', 'Date range', 'Period', 'Records', 'Total time']],
+        body: timePeriodSummaries.map((summary) => [
+          reportWorkerLabel,
+          reportDateRangeLabel,
+          summary.label,
+          summary.records,
+          formatTotalTime(summary.totalTimeMinutes),
+        ]),
+      })
+      doc.save(reportFileName('pdf'))
+      return
+    }
+
     autoTable(doc, {
-      startY: 28,
-      head: [['Date', 'Title', 'No of people', 'Names', 'Location', 'Start', 'End', 'Total', 'Description', 'Equipments used', 'Remarks']],
+      startY: 44,
+      head: [['Date', 'No of people', 'Names', 'Location', 'Start', 'End', 'Total', 'Description', 'Equipments used', 'Remarks']],
       body: reportRecords.map((record) => [
         formatBsDate(record.maintenance_date),
-        record.title ?? '',
         record.no_of_people ?? record.done_by,
-        peopleNamesLabel(record),
+        peopleNamesStack(record),
         record.location ?? '',
         normalizeTime(record.start_time),
         normalizeTime(record.end_time),
@@ -321,7 +454,6 @@ export function Maintenance() {
 
   async function saveRecord(e: FormEvent) {
     e.preventDefault()
-    const title = form.title.trim()
     const noOfPeople = Number(form.no_of_people)
     const peopleNames = form.people_names.map((name) => name.trim()).filter(Boolean)
     const totalMinutes = calculateTotalMinutes(form.start_time, form.end_time)
@@ -331,7 +463,6 @@ export function Maintenance() {
 
     if (
       !form.maintenance_date ||
-      !title ||
       !form.no_of_people.trim() ||
       Number.isNaN(noOfPeople) ||
       noOfPeople <= 0 ||
@@ -342,14 +473,14 @@ export function Maintenance() {
       !description ||
       !equipmentsUsed
     ) {
-      setError('Title, No of people, Names, Start time, End time, Location, Description of work, and Equipments used are required.')
+      setError('No of people, Names, Start time, End time, Location, Description of work, and Equipments used are required.')
       return
     }
 
     setError('')
     const payload = {
       maintenance_date: form.maintenance_date,
-      title,
+      title: null,
       done_by: String(noOfPeople),
       no_of_people: noOfPeople,
       people_names: peopleNames,
@@ -421,21 +552,6 @@ export function Maintenance() {
               value={form.maintenance_date}
               onChange={(maintenance_date) => setForm({ ...form, maintenance_date })}
             />
-          </div>
-          <div className="lg:col-span-2">
-            <label className="block text-sm font-medium mb-1">Title</label>
-            <input
-              list="maintenance-title-suggestions"
-              required
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-            />
-            <datalist id="maintenance-title-suggestions">
-              {maintenanceTitleSuggestions.map((title) => (
-                <option key={title} value={title} />
-              ))}
-            </datalist>
           </div>
           <div className="lg:col-span-2">
             <label className="block text-sm font-medium mb-1">No of people</label>
@@ -617,6 +733,50 @@ export function Maintenance() {
                 ))}
               </select>
             </div>
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setReportView('details')}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                  reportView === 'details' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Details
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportView('name')}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                  reportView === 'name' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Name wise
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportView('time')}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                  reportView === 'time' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Time period
+              </button>
+            </div>
+            {reportView === 'time' && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Total time period</label>
+                <select
+                  value={timePeriod}
+                  onChange={(e) => setTimePeriod(e.target.value as TimePeriod)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+                >
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -646,68 +806,124 @@ export function Maintenance() {
           </div>
         </div>
         <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 print:mt-0 print:overflow-visible print:rounded-none print:border-0">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-100">
-              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Title</th>
+          {reportView === 'name' ? (
+            <table className="w-full text-sm">
+              <thead className="bg-slate-100">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3 text-right">Records</th>
+                  <th className="px-4 py-3 text-right">Total time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {nameWiseSummaries.map((summary) => (
+                  <tr key={summary.name}>
+                    <td className="px-4 py-3 font-medium text-slate-900">{summary.name}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{summary.records}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{formatTotalTime(summary.totalTimeMinutes)}</td>
+                  </tr>
+                ))}
+                {nameWiseSummaries.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-6 text-center text-slate-500">
+                      No worker report data found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          ) : reportView === 'time' ? (
+            <table className="w-full text-sm">
+              <thead className="bg-slate-100">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <th className="px-4 py-3">Worker</th>
+                  <th className="px-4 py-3">Date range</th>
+                  <th className="px-4 py-3">Period</th>
+                  <th className="px-4 py-3 text-right">Records</th>
+                  <th className="px-4 py-3 text-right">Total time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {timePeriodSummaries.map((summary) => (
+                  <tr key={summary.key}>
+                    <td className="px-4 py-3 text-slate-700">{reportWorkerLabel}</td>
+                    <td className="px-4 py-3 text-slate-700">{reportDateRangeLabel}</td>
+                    <td className="px-4 py-3 font-medium text-slate-900">{summary.label}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{summary.records}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{formatTotalTime(summary.totalTimeMinutes)}</td>
+                  </tr>
+                ))}
+                {timePeriodSummaries.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                      No total time report data found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-slate-100">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">No of people</th>
-                <th className="px-4 py-3">Names</th>
-                <th className="px-4 py-3">Location</th>
-                <th className="px-4 py-3">Start</th>
-                <th className="px-4 py-3">End</th>
-                <th className="px-4 py-3">Total time</th>
-                <th className="px-4 py-3">Description</th>
-                <th className="px-4 py-3">Equipments used</th>
-                <th className="px-4 py-3">Remarks</th>
-                <th className="px-4 py-3 text-right print:hidden">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {reportRecords.map((record) => (
-                <tr key={record.id} className="align-top hover:bg-slate-50">
-                  <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-900">{formatBsDate(record.maintenance_date)}</td>
-                  <td className="px-4 py-3 min-w-48 font-medium text-slate-800">{record.title || '-'}</td>
-                  <td className="px-4 py-3 text-slate-700">{record.no_of_people ?? record.done_by}</td>
-                  <td className="px-4 py-3 min-w-48 text-slate-700">{peopleNamesLabel(record)}</td>
-                  <td className="px-4 py-3 min-w-40 text-slate-700">{record.location || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-700">{normalizeTime(record.start_time) || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-700">{normalizeTime(record.end_time) || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-700">{formatTotalTime(record.total_time_minutes ?? null)}</td>
-                  <td className="px-4 py-3 min-w-64 text-slate-700">{record.description}</td>
-                  <td className="px-4 py-3 min-w-48 text-slate-600">{record.equipments_used || '-'}</td>
-                  <td className="px-4 py-3 min-w-48 text-slate-600">{record.remarks || '-'}</td>
-                  <td className="px-4 py-3 print:hidden">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(record)}
-                        title="Edit pipeline maintenance record"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100"
-                      >
-                        <EditIcon />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(record)}
-                        title="Delete pipeline maintenance record"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
-                      >
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  </td>
+                  <th className="px-4 py-3">Names</th>
+                  <th className="px-4 py-3">Location</th>
+                  <th className="px-4 py-3">Start</th>
+                  <th className="px-4 py-3">End</th>
+                  <th className="px-4 py-3">Total time</th>
+                  <th className="px-4 py-3">Description</th>
+                  <th className="px-4 py-3">Equipments used</th>
+                  <th className="px-4 py-3">Remarks</th>
+                  <th className="px-4 py-3 text-right print:hidden">Action</th>
                 </tr>
-              ))}
-              {reportRecords.length === 0 && (
-                <tr>
-                  <td colSpan={12} className="px-4 py-6 text-center text-slate-500">
-                    No pipeline maintenance records found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {reportRecords.map((record) => (
+                  <tr key={record.id} className="align-top hover:bg-slate-50">
+                    <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-900">{formatBsDate(record.maintenance_date)}</td>
+                    <td className="px-4 py-3 text-slate-700">{record.no_of_people ?? record.done_by}</td>
+                    <td className="px-4 py-3 min-w-48 whitespace-pre-line text-slate-700">{peopleNamesStack(record)}</td>
+                    <td className="px-4 py-3 min-w-40 text-slate-700">{record.location || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-slate-700">{normalizeTime(record.start_time) || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-slate-700">{normalizeTime(record.end_time) || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-slate-700">{formatTotalTime(record.total_time_minutes ?? null)}</td>
+                    <td className="px-4 py-3 min-w-64 text-slate-700">{record.description}</td>
+                    <td className="px-4 py-3 min-w-48 text-slate-600">{record.equipments_used || '-'}</td>
+                    <td className="px-4 py-3 min-w-48 text-slate-600">{record.remarks || '-'}</td>
+                    <td className="px-4 py-3 print:hidden">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(record)}
+                          title="Edit pipeline maintenance record"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100"
+                        >
+                          <EditIcon />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(record)}
+                          title="Delete pipeline maintenance record"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {reportRecords.length === 0 && (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-6 text-center text-slate-500">
+                      No pipeline maintenance records found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
 

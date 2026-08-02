@@ -15,6 +15,7 @@ const NAV: NavItem[] = [
   { type: 'heading', label: 'Records' },
   { type: 'link', to: '/tap', label: 'Tap', child: true },
   { type: 'link', to: '/maintenance', label: 'Pipeline Maintenance', child: true },
+  { type: 'link', to: '/maintenance-report', label: 'Maintenance Report', child: true },
   { type: 'link', to: '/notes', label: 'Notes', child: true },
 ]
 
